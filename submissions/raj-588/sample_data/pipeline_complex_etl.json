@@ -1,0 +1,52 @@
+[
+  {
+    "id": "extract_crm",
+    "duration": 5.0,
+    "dependsOn": []
+  },
+  {
+    "id": "extract_billing",
+    "duration": 8.0,
+    "dependsOn": []
+  },
+  {
+    "id": "extract_web_events",
+    "duration": 12.0,
+    "dependsOn": []
+  },
+  {
+    "id": "clean_crm",
+    "duration": 3.0,
+    "dependsOn": ["extract_crm"]
+  },
+  {
+    "id": "clean_billing",
+    "duration": 4.0,
+    "dependsOn": ["extract_billing"]
+  },
+  {
+    "id": "sessionize_events",
+    "duration": 6.0,
+    "dependsOn": ["extract_web_events"]
+  },
+  {
+    "id": "join_customer_360",
+    "duration": 7.0,
+    "dependsOn": ["clean_crm", "clean_billing"]
+  },
+  {
+    "id": "attribution_model",
+    "duration": 10.0,
+    "dependsOn": ["join_customer_360", "sessionize_events"]
+  },
+  {
+    "id": "export_data_mart",
+    "duration": 2.0,
+    "dependsOn": ["attribution_model"]
+  },
+  {
+    "id": "refresh_bi_dashboard",
+    "duration": 1.0,
+    "dependsOn": ["export_data_mart"]
+  }
+]

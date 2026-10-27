@@ -1,0 +1,22 @@
+[
+  {
+    "id": "cluster_a_extract",
+    "duration": 5.0,
+    "dependsOn": []
+  },
+  {
+    "id": "cluster_a_load",
+    "duration": 3.0,
+    "dependsOn": ["cluster_a_extract"]
+  },
+  {
+    "id": "cluster_b_extract",
+    "duration": 10.0,
+    "dependsOn": []
+  },
+  {
+    "id": "cluster_b_load",
+    "duration": 4.0,
+    "dependsOn": ["cluster_b_extract"]
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "fetch_source",
+    "duration": 2.0,
+    "dependsOn": []
+  },
+  {
+    "id": "transform_a",
+    "duration": 4.0,
+    "dependsOn": ["fetch_source"]
+  },
+  {
+    "id": "transform_b",
+    "duration": 3.0,
+    "dependsOn": ["fetch_source"]
+  },
+  {
+    "id": "merge_output",
+    "duration": 1.5,
+    "dependsOn": ["transform_a", "transform_b"]
+  }
+]

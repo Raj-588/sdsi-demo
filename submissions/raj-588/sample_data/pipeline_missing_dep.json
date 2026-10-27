@@ -1,0 +1,12 @@
+[
+  {
+    "id": "step_one",
+    "duration": 4.0,
+    "dependsOn": []
+  },
+  {
+    "id": "step_two",
+    "duration": 2.5,
+    "dependsOn": ["step_one", "non_existent_database_dump"]
+  }
+]

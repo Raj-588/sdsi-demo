@@ -1,0 +1,22 @@
+[
+  {
+    "id": "job_a",
+    "duration": 2.0,
+    "dependsOn": ["job_c"]
+  },
+  {
+    "id": "job_b",
+    "duration": 3.0,
+    "dependsOn": ["job_a"]
+  },
+  {
+    "id": "job_c",
+    "duration": 1.0,
+    "dependsOn": ["job_b"]
+  },
+  {
+    "id": "job_independent",
+    "duration": 5.0,
+    "dependsOn": []
+  }
+]
