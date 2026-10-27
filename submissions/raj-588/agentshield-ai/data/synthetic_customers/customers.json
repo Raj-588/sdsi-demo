@@ -1,0 +1,5 @@
+[
+  {"id": "CUST-1001", "name": "Acme Synthetic Ltd", "tier": "enterprise"},
+  {"id": "CUST-1002", "name": "Globex Test Pvt", "tier": "mid-market"},
+  {"id": "CUST-1003", "name": "Initech Demo Inc", "tier": "smb"}
+]

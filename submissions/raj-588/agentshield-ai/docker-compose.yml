@@ -1,0 +1,25 @@
+# Optional local orchestration. Ollama is optional; the app falls back to the
+# deterministic mock agent when it is unavailable.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=sqlite:////data/agentshield.db
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - FORCE_MOCK_AGENT=true
+    ports: ["8000:8000"]
+    volumes: ["agentshield_data:/data"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - AGENTSHIELD_API=http://backend:8000
+    ports: ["8501:8501"]
+    command: streamlit run frontend/dashboard.py --server.address 0.0.0.0 --server.port 8501
+    depends_on: [backend]
+volumes:
+  agentshield_data:
