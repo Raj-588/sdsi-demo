@@ -2,7 +2,6 @@
 
 **Project:** SDSI PS5: Job Scheduler with Dependency Resolution (DAG)  
 **Developer:** `raj-588`  
-**Model:** Antigravity Coding Assistant (Gemini 3.8 Flash High)
 
 ---
 
