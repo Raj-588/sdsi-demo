@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "AI-EDR Guard for AI chat apps",
+  "version": "1.1.0",
+  "description": "Inspects prompts and file uploads on Claude.ai and Gemini with the AI-EDR gateway before they are sent.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8080/*",
+    "http://127.0.0.1:8080/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "http://localhost:8080/extension-test*"
+      ],
+      "js": [
+        "page_guard.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "http://localhost:8080/extension-test*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "AI-EDR Guard",
+    "default_popup": "popup.html"
+  }
+}

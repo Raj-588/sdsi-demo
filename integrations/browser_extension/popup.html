@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{font:13px -apple-system,Segoe UI,sans-serif;width:260px;margin:12px;color:#111}
+label{display:block;margin:8px 0 2px;color:#555}input,select{width:100%;padding:5px;box-sizing:border-box}
+.row{display:flex;gap:8px;align-items:center;margin-top:10px}.row input{width:auto}
+b{font-size:14px}button{margin-top:12px;width:100%;padding:6px}
+</style></head><body>
+<b>🛡️ AI-EDR Guard</b>
+<div class="row"><input type="checkbox" id="enabled"><span>Protection on</span></div>
+<label>Gateway URL</label><input id="gateway">
+<label>Tenant policy</label>
+<select id="tenant">
+  <option value="default">default (strip &amp; sanitize)</option>
+  <option value="hr_tools">hr_tools (strip &amp; sanitize)</option>
+  <option value="samsung_sec_div">samsung_sec_div (block &amp; quarantine)</option>
+  <option value="demo_audit">demo_audit (audit only)</option>
+</select>
+<button id="save">Save</button>
+<script src="popup.js"></script>
+</body></html>

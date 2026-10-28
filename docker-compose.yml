@@ -1,0 +1,16 @@
+# Local stack. The gateway runs standalone (in-memory/SQLite backends); Redis and Qdrant are
+# provisioned for the production backends described in architecture.md (requirements-ml.txt).
+services:
+  gateway:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      AI_EDR_UPSTREAM_MODE: ${AI_EDR_UPSTREAM_MODE:-mock}
+      AI_EDR_DATA_DIR: /data
+    volumes: ["./data:/data", "./models:/app/models:ro"]
+  redis:
+    image: redis:7.4-alpine
+    ports: ["6379:6379"]
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports: ["6333:6333"]
