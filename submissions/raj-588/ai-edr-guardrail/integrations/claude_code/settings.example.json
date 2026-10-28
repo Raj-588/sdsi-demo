@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python3 /ABSOLUTE/PATH/TO/integrations/claude_code/ai_edr_hook.py", "timeout": 15 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Read|Bash|Write|Edit|mcp__.*",
+        "hooks": [ { "type": "command", "command": "python3 /ABSOLUTE/PATH/TO/integrations/claude_code/ai_edr_hook.py", "timeout": 15 } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "WebFetch|WebSearch|mcp__.*",
+        "hooks": [ { "type": "command", "command": "python3 /ABSOLUTE/PATH/TO/integrations/claude_code/ai_edr_hook.py", "timeout": 15 } ] }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "tools": { "enableHooks": true },
+  "hooks": {
+    "BeforeAgent": [
+      { "hooks": [ { "name": "ai-edr-prompt", "type": "command", "command": "python3 /Users/rajkumarpareek/Downloads/Digithon/integrations/claude_code/ai_edr_hook.py", "timeout": 15000 } ] }
+    ],
+    "BeforeTool": [
+      { "matcher": "read_file|read_many_files|run_shell_command|write_file|replace|mcp__.*",
+        "hooks": [ { "name": "ai-edr-tool", "type": "command", "command": "python3 /Users/rajkumarpareek/Downloads/Digithon/integrations/claude_code/ai_edr_hook.py", "timeout": 15000 } ] }
+    ],
+    "AfterTool": [
+      { "matcher": "web_fetch|google_web_search|mcp__.*",
+        "hooks": [ { "name": "ai-edr-result", "type": "command", "command": "python3 /Users/rajkumarpareek/Downloads/Digithon/integrations/claude_code/ai_edr_hook.py", "timeout": 15000 } ] }
+    ]
+  }
+}

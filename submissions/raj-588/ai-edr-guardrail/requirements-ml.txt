@@ -1,0 +1,5 @@
+# Optional production backends. The platform runs without these (in-memory fallbacks).
+onnxruntime>=1.18          # Tier 2: Prompt Guard / DeBERTa-v3 ONNX classifier
+transformers>=4.44         # tokenizer for the ONNX classifier
+qdrant-client>=1.10        # Tier 3: Semantic Threat Vector DB
+redis>=5.0                 # Hot signature cache + Falcon Loop pub/sub

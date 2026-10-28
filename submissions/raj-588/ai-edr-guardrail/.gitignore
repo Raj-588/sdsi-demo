@@ -1,0 +1,11 @@
+*.aiff
+*.pyc
+.DS_Store
+.pytest_cache/
+.venv/
+__pycache__/
+data/
+models/
+presentation/build/
+presentation/Untitled presentation - Google Slides.html
+presentation/Untitled presentation - Google Slides_files/

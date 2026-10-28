@@ -1,0 +1,67 @@
+# AI-EDR tenant policies. Hot-reloaded on change; version is stamped on every verdict.
+version: 1
+
+defaults:
+  mode: STRIP_AND_SANITIZE          # BLOCK_AND_QUARANTINE | STRIP_AND_SANITIZE | AUDIT_ONLY
+  enable_falcon_technique: true
+  fail_mode: CLOSED                 # CLOSED = block if a detector errors, OPEN = allow + audit
+  max_strip_severity: CRITICAL      # indirect findings above this are blocked even in STRIP mode
+  thresholds:
+    vector_similarity: 0.80         # Tier 3 cosine threshold (hashing embedder; use 0.88 with a neural embedder)
+    classifier: 0.80                # Tier 2 injection probability
+  weights:
+    classifier: 0.55
+    ioa: 0.35
+    anomaly: 0.10
+  severity_bands:                   # risk score -> severity
+    LOW: 0.30
+    MEDIUM: 0.50
+    HIGH: 0.70
+    CRITICAL: 0.90
+  dlp:
+    secrets: BLOCK                  # BLOCK | AUDIT | OFF
+    pii: AUDIT
+    proprietary_markers: AUDIT
+  proprietary_markers: []
+  falcon_loop:
+    auto_promote_min_severity: HIGH
+    auto_promote_min_score: 0.85
+    max_promotions_per_tenant_per_hour: 50
+
+tenants:
+  samsung_sec_div:
+    mode: BLOCK_AND_QUARANTINE
+    dlp:
+      proprietary_markers: BLOCK
+    proprietary_markers:
+      - "SAMSUNG CONFIDENTIAL"
+      - "SEC INTERNAL ONLY"
+      - "@samsung-internal"
+
+  hr_tools:
+    mode: STRIP_AND_SANITIZE
+
+  demo_audit:
+    mode: AUDIT_ONLY
+
+# Samsung platform field maps. FabriX / AI Pro wire formats are not public; these maps
+# describe where prompts/documents live in their payloads and can be changed without code.
+platform_field_maps:
+  SAMSUNG_FABRIX:
+    user_prompt: ["query", "input.query", "messages[-1].content"]
+    system: ["prompt_template", "system"]
+    documents: ["context.documents", "rag_chunks"]
+    document_text_key: "content"
+    document_name_key: "title"
+    history: ["history"]
+    tool_calls: ["agent_actions"]
+    tenant_header: "X-FabriX-Tenant-Id"
+    trace_header: "X-FabriX-Trace-Id"
+  SAMSUNG_AIPRO:
+    user_prompt: ["prompt", "messages[-1].content"]
+    system: ["system"]
+    documents: ["workspace_files", "context_files"]
+    document_text_key: "content"
+    document_name_key: "path"
+    diff: ["diff"]
+    tool_calls: ["tool_calls"]
