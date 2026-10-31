@@ -41,6 +41,18 @@ class VectorThreatDB:
         for a in load_signature_seed().get("attack_corpus", []):
             self.upsert(a["text"], a["category"], "HIGH", "SEED")
 
+    def load_entries(self, entries: list[dict]) -> None:
+        """Replace the index with the VECTOR entries of a signed content bundle (endpoint agent)."""
+        items, rows = [], []
+        for e in entries:
+            if e["type"] == "VECTOR":
+                items.append(ThreatVector(e["id"], e["pattern"], e["category"], e.get("severity", "HIGH"),
+                                          e.get("source", "SEED")))
+                rows.append(self.embed(e["pattern"]))
+        with self._lock:
+            self.items = items
+            self._matrix = np.vstack(rows) if rows else np.zeros((0, self.embedder.dim), dtype=np.float32)
+
     def embed(self, text: str) -> np.ndarray:
         return self.embedder.embed(text)
 

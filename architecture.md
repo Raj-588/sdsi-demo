@@ -768,3 +768,23 @@ Constraints:
 - **Kernel stays thin.** A kernel bug can crash the machine, so all detection logic stays in user space and the kernel only enforces "ask the agent".
 - **Encrypted traffic** can only be rewritten with the enterprise CA. Without it, the TLS tap observes only.
 - **Local models** that touch no files and no network can only be checked at their input and output.
+
+---
+
+## 20. Endpoint fleet platform (as built, 31 Oct 2026)
+
+The first implementation of §19. Details, results and limits: [docs/FLEET_PLATFORM.md](docs/FLEET_PLATFORM.md).
+
+| §19 component | As built | Differs from the design |
+|---|---|---|
+| `checkpointd` | `agent/checkpointd/`: Python daemon reusing the gateway engine (`AIEDRGuard`) with local learning disabled | — |
+| File checkpoint | Workspace pre-scan (1 s sweep); poisoned file → 0400 quarantine + `<name>.sanitized.txt` | No kernel read hook on macOS yet (needs Endpoint Security entitlement); the shadow-copy redirect is replaced by a sanitized sibling file |
+| Exec checkpoint | 50 ms process-table poll, lineage rebuild, credential/egress/destructive rules + full pipeline; ENFORCE kills the process tree | Reactive (kill), not pre-exec deny, except on Linux with the BPF LSM program |
+| Network checkpoint | AI-lineage egress outside the allow-list → alert / kill | No transparent redirect to the local proxy yet |
+| Linux kernel | `agent/kernel/linux/checkpoint.bpf.c` (fork lineage, `bprm_check_security`, `file_open`, `socket_connect`) + libbpf loader; maps filled by `sensors/linux_ebpf.py` | Written, not yet compiled or run on a real kernel |
+| Local Risk DB replica | Signed per-tenant bundle, verified (Ed25519 + SHA-256) and hot-swapped into the signature trie and vector index; last good bundle cached on disk | — |
+| Control plane | `src/control_plane/` mounted at `/v1/cp` in the gateway app; SQLite (WAL) schema ready for Postgres | Single node |
+| Content pipeline | Snapshot → gate (35 attacks, 40 benign; any FP fails) → sign → rings CANARY/EARLY/BROAD/GA → auto-rollback when ≥ 2 agents fail | — |
+| Learning loop | Gateway promotions → TENANT `LEARNED` entries → auto-release to CANARY | Gateway still learns instantly in-process; endpoints get it through the gate |
+| Portal | `/portal`: overview, detections with process lineage, endpoints (ring/mode control), Risk DB (OWASP/ATLAS, approve/disable/FP), releases (gate, promote, rollback), deploy, audit | No SSO/RBAC yet |
+

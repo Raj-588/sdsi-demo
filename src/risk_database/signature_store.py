@@ -50,6 +50,21 @@ class SignatureStore:
         self.dlp = [(s, re.compile(s["pattern"])) for s in seed.get("dlp_patterns", [])]
         self.rebuild()
 
+    def load_entries(self, entries: list[dict]) -> None:
+        """Replace all signatures with the PHRASE / REGEX / DLP entries of a signed content bundle (endpoint agent)."""
+        phrases, regexes, dlp = {}, [], []
+        for e in entries:
+            sig = {"id": e["id"], "pattern": e["pattern"], "category": e["category"],
+                   "severity": e.get("severity", "HIGH"), "source": e.get("source", "SEED")}
+            if e["type"] == "PHRASE":
+                phrases[_norm(e["pattern"])] = sig
+            elif e["type"] == "REGEX":
+                regexes.append((sig, re.compile(e["pattern"])))
+            elif e["type"] == "DLP":
+                dlp.append(({**sig, "kind": e.get("dlp_kind") or "secrets"}, re.compile(e["pattern"])))
+        self.phrases, self.regexes, self.dlp = phrases, regexes, dlp
+        self.rebuild()
+
     def rebuild(self) -> None:
         a = ahocorasick.Automaton()
         for phrase, sig in self.phrases.items():

@@ -9,6 +9,7 @@ An inline, pre-LLM security layer (AI Endpoint Detection & Response). It stops *
 - **Demo script:** [docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md) · **claude.ai / Gemini web demo:** [docs/BROWSER_DEMO.md](docs/BROWSER_DEMO.md)
 - **Samsung feasibility:** [docs/SAMSUNG_FEASIBILITY.md](docs/SAMSUNG_FEASIBILITY.md)
 - **Measured results:** [docs/BENCHMARK.md](docs/BENCHMARK.md)
+- **Endpoint fleet (agent, control plane, persistent Risk DB, portal):** [docs/FLEET_PLATFORM.md](docs/FLEET_PLATFORM.md)
 - **Deck and video:** [presentation/](presentation/)
 
 ## Quick start
@@ -38,11 +39,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt onnxruntime t
 - **IDE hooks:** `integrations/claude_code/ai_edr_hook.py` works for Claude Code and Gemini CLI.
 - **Browser extension:** `integrations/browser_extension/` protects claude.ai and gemini.google.com (prompts and file uploads).
 
+**Endpoint fleet:** `agent/checkpointd` runs on each machine and checks what AI agents do: commands they run, files they read and connections they open. A Linux BPF LSM program in `agent/kernel/linux` adds in-kernel denial. The control plane (`src/control_plane`, `/v1/cp`) keeps the AI Risk DB in a database and ships it as gated, Ed25519-signed releases through CANARY → GA rings. The portal is at `/portal`. Run `./scripts/start_fleet_demo.sh`.
+
 **Policy:** `config/ai_edr_policies.yaml` sets the mode per tenant: `BLOCK_AND_QUARANTINE`, `STRIP_AND_SANITIZE` or `AUDIT_ONLY`. It also holds DLP rules, thresholds and the FabriX/AI Pro field maps.
 
 ## Status and honest limits
 
 - Inspects inputs only; model output is not inspected yet.
+- The endpoint agent's user-space sensor kills malicious commands after they start; pre-exec denial needs the kernel checkpoint, whose Linux BPF code has not been compiled or run on a real kernel yet. See [docs/FLEET_PLATFORM.md](docs/FLEET_PLATFORM.md).
 - Redis and Qdrant are represented by in-process stand-ins with the same interfaces; see `requirements-ml.txt`.
 - The DeBERTa model is English-only. Korean text is covered by Korean signatures, IOAs and the local classifier.
 - Known false positive: "Please ignore the previous email…"; see `docs/BENCHMARK.md`.

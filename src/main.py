@@ -7,6 +7,7 @@ Mode 1  Universal reverse-proxy gateway (drop-in base_url):
           POST /v1/fabrix/{path}                                    Samsung FabriX
           POST /v1/aipro/{path}                                     Samsung AI Pro
 Mode 2  Out-of-band hook API: POST /v1/ai-edr/inspect (see proxy_router/hook_webhook_controller.py)
+Fleet   /portal (endpoint fleet + Risk DB + content releases), /v1/cp/... (control plane for checkpointd agents)
 Demo    /console (live SOC view), /mock/... (the unprotected vulnerable mock LLM)
 
 Run:  uvicorn src.main:app --port 8080
@@ -21,6 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .adapters import ADAPTERS
+from .control_plane.api import ControlPlane, agent_router, portal_router
 from .ai_edr_guard.pipeline_orchestrator import AIEDRGuard
 from .mock_llm import vulnerable_brain as mock
 from .proxy_router import upstream_dispatcher
@@ -29,11 +31,13 @@ from .schemas.canonical import SourcePlatform, VerdictType
 from .settings import settings
 
 CONSOLE = Path(__file__).resolve().parent / "demo_console" / "console.html"
+PORTAL = Path(__file__).resolve().parent / "portal" / "portal.html"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.guard = AIEDRGuard()
+    app.state.cp = ControlPlane()
     # Warm up parsers / classifier so the first real request is not slow.
     import pymupdf
 
@@ -49,6 +53,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI-EDR Inline Guardrail Platform", version="1.0.0", lifespan=lifespan)
 app.include_router(hook_router)
+app.include_router(agent_router)
+app.include_router(portal_router)
 
 
 @app.get("/", include_in_schema=False)
@@ -59,6 +65,11 @@ async def root():
 @app.get("/console", include_in_schema=False)
 async def console():
     return FileResponse(CONSOLE)
+
+
+@app.get("/portal", include_in_schema=False)
+async def portal():
+    return FileResponse(PORTAL)
 
 
 @app.get("/extension-test", include_in_schema=False)

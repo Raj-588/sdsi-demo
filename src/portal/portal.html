@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheckPoint Zero Fleet</title>
+<style>
+:root{
+  --bg:#0a0f1e; --side:#0d1426; --panel:#111a2f; --panel2:#16213b; --line:#223052; --text:#e6ebf5; --muted:#8a97b8;
+  --blue:#4c8dff; --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --violet:#a78bfa; --cyan:#22d3ee;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex}
+button,input,select,textarea{font:inherit}
+aside{width:236px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+.brand{display:flex;gap:10px;align-items:center;padding:18px 16px 14px}
+.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--violet),var(--cyan));display:grid;place-items:center;font-weight:800;color:#06102a;font-size:13px}
+.brand b{display:block;font-size:15px}.brand span{font-size:11px;color:var(--muted)}
+nav{padding:6px 10px;flex:1;overflow:auto}
+.navsec{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#5d6a8c;padding:14px 10px 6px}
+.nav{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--muted);cursor:pointer;margin-bottom:2px}
+.nav:hover{background:#141e36;color:var(--text)}
+.nav.active{background:#18264a;color:var(--text);box-shadow:inset 3px 0 0 var(--cyan)}
+.nav .ic{width:18px;text-align:center;font-size:15px}
+.nav .badge{margin-left:auto;font-size:11px;padding:0 7px;border-radius:999px;background:#223052;color:#cbd5e1;min-width:22px;text-align:center}
+.nav .badge.red{background:#4a1520;color:#fca5a5}
+.status{padding:12px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red);flex:none}.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.amber{background:var(--amber)}.dot.off{background:#4b5563}
+main{flex:1;min-width:0;height:100vh;overflow:auto}
+.top{padding:22px 28px 8px;display:flex;align-items:flex-end;gap:16px}
+.top h1{margin:0;font-size:21px}.top p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.top .actions{margin-left:auto;display:flex;gap:8px}
+.page{display:none;padding:12px 28px 32px}.page.active{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:0}
+.card h3{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.card h3 .r{margin-left:auto;text-transform:none;letter-spacing:0}
+.pad{padding:14px 16px}
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(5,1fr)}
+.kpi{padding:14px 16px}.kpi .k{color:var(--muted);font-size:11.5px}.kpi .v{font-size:26px;font-weight:700;margin-top:2px}.kpi .s{color:var(--muted);font-size:11.5px}
+.two{grid-template-columns:1fr 1fr}.three{grid-template-columns:1.3fr 1fr 1fr}
+.pill{padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.3px;display:inline-block;white-space:nowrap}
+.a-KILLED,.a-BLOCKED,.a-QUARANTINED{background:#3b1219;color:#fca5a5}
+.a-SANITIZED{background:#3a2a0b;color:#fcd34d}.a-ALERTED,.a-EXITED_BEFORE_KILL{background:#2a1f47;color:#c4b5fd}
+.a-OBSERVED{background:#1c2742;color:#aab6d3}
+.s-ACTIVE,.s-RELEASED,.s-HEALTHY,.s-TESTED{background:#0f2e1d;color:#86efac}
+.s-PENDING_REVIEW,.s-SAFE_MODE{background:#3a2a0b;color:#fcd34d}
+.s-DISABLED,.s-REVERTED,.s-ROLLED_BACK,.s-GATE_FAILED{background:#3b1219;color:#fca5a5}
+.sev-CRITICAL{background:#3b1219;color:#fca5a5}.sev-HIGH{background:#3a1f0b;color:#fdba74}.sev-MEDIUM{background:#3a2a0b;color:#fcd34d}
+.sev-LOW,.sev-NONE{background:#1c2742;color:#aab6d3}
+.ring{background:#13243f;color:#93c5fd}.mode-ENFORCE{background:#0f2e1d;color:#86efac}.mode-MONITOR{background:#2a1f47;color:#c4b5fd}
+.tag{font-size:10.5px;padding:1px 7px;border-radius:5px;background:#1c2742;color:#aab6d3;font-weight:600;letter-spacing:.2px;white-space:nowrap}
+.muted{color:var(--muted)}.small{font-size:12px}.mono{font-family:var(--mono)}
+pre{white-space:pre-wrap;word-break:break-word;margin:0;font:12px/1.45 var(--mono);color:#cfd8ee}
+.btn{all:unset;cursor:pointer;font-size:12px;padding:6px 12px;border:1px solid var(--line);border-radius:7px;color:var(--text);background:var(--panel2);white-space:nowrap}
+.btn:hover{border-color:var(--blue)}.btn.primary{background:#1d3a75;border-color:#2e5bb0}.btn.danger:hover{border-color:var(--red)}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.empty{color:var(--muted);padding:26px;text-align:center;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:9px 12px;white-space:nowrap;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+td.wrap{white-space:normal;max-width:380px;min-width:240px}
+th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--panel);z-index:1}
+tbody tr.click{cursor:pointer}tbody tr.click:hover{background:#142039}tbody tr.sel{background:#18264a}
+.split{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(360px,1fr);gap:14px;align-items:start}
+.scroll{max-height:calc(100vh - 230px);overflow:auto}
+.detail{position:sticky;top:12px;max-height:calc(100vh - 140px);overflow:auto}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.search,.inp{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 12px;color:var(--text);outline:none}
+.search{flex:1;min-width:220px}.search:focus,.inp:focus{border-color:var(--blue)}
+select.inp{padding:7px 10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{all:unset;cursor:pointer;font-size:12px;padding:4px 11px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.chip.on{border-color:var(--cyan);color:var(--text);background:#13243f}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:6px 10px;font-size:12.5px}.kv div:nth-child(odd){color:var(--muted)}
+.section{margin-top:16px}.section h4{margin:0 0 8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.banner{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center}
+.banner .big{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:21px;flex:none}
+.banner h2{margin:0;font-size:15.5px}.banner p{margin:3px 0 0;color:var(--muted);font-size:12.5px}
+.finding{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:8px 10px;background:#0d1428;border-radius:8px;margin-bottom:6px;font-size:12px}
+.finding .ev{grid-column:1/-1;font-family:var(--mono);color:#cbd5e1;font-size:11.5px;word-break:break-word}
+.tree{font:12px/1.6 var(--mono)}
+.tree .n{padding:4px 8px;border-left:2px solid var(--line);margin-left:calc(var(--d) * 16px);color:#cbd5e1;word-break:break-all}
+.tree .n.bad{border-color:var(--red);color:#fca5a5;background:#1f0d14;border-radius:0 6px 6px 0}
+.tree .n.ai{border-color:var(--violet)}
+.tree .n b{color:var(--text)}
+.feed .row{display:flex;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:center;cursor:pointer}
+.feed .row:hover{background:#131d35}.feed .row:last-child{border-bottom:none}
+.ic2{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;font-size:14px;background:#1c2742}
+.ttl{flex:1;min-width:0}.ttl b{display:block;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ttl span{font-size:11.5px;color:var(--muted)}
+.when{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hbars{display:flex;flex-direction:column;gap:8px}
+.hbar{display:grid;grid-template-columns:120px 1fr 40px;gap:10px;align-items:center;font-size:12px}
+.hbar .t{height:10px;background:#1a2440;border-radius:5px;overflow:hidden}.hbar .t i{display:block;height:100%;border-radius:5px;background:var(--blue)}
+.hbar .c{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.rings{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px 16px}
+.rg{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;position:relative}
+.rg .n{font-size:11px;color:var(--cyan);font-weight:700;letter-spacing:.6px}
+.rg .v{font-size:20px;font-weight:700;margin:2px 0}.rg .s{font-size:11.5px;color:var(--muted)}
+.rg:not(:last-child)::after{content:"→";position:absolute;right:-10px;top:50%;transform:translate(50%,-50%);color:#4b5b82}
+.gate{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}.gate b{font-size:16px;display:block}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.form .full{grid-column:1/-1}
+.form label{font-size:11.5px;color:var(--muted);display:block;margin-bottom:4px}
+.form .inp{width:100%}
+.toast{position:fixed;right:20px;bottom:20px;background:#16213b;border:1px solid var(--line);border-radius:10px;padding:12px 16px;font-size:13px;max-width:420px;box-shadow:0 8px 30px #0008;display:none;z-index:10}
+.toast.err{border-color:#7f1d1d}
+.code{background:#0d1428;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.two,.three,.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><div class="logo">CP0</div><div><b>CheckPoint Zero</b><span>Fleet &amp; Risk DB portal</span></div></div>
+  <nav>
+    <div class="navsec">Monitor</div>
+    <button class="nav active" data-page="overview"><span class="ic">◎</span>Overview</button>
+    <button class="nav" data-page="detections"><span class="ic">⚡</span>Detections<span class="badge red" id="b-det">0</span></button>
+    <button class="nav" data-page="endpoints"><span class="ic">🖥</span>Endpoints<span class="badge" id="b-ep">0</span></button>
+    <div class="navsec">Threat content</div>
+    <button class="nav" data-page="riskdb"><span class="ic">🗄</span>AI Risk DB<span class="badge" id="b-rdb">0</span></button>
+    <button class="nav" data-page="releases"><span class="ic">📦</span>Content releases</button>
+    <div class="navsec">Admin</div>
+    <button class="nav" data-page="deploy"><span class="ic">⬇</span>Deploy agents</button>
+    <button class="nav" data-page="audit"><span class="ic">📜</span>Audit log</button>
+    <a class="nav" href="/console" target="_blank"><span class="ic">↗</span>Gateway console</a>
+  </nav>
+  <div class="status"><span class="dot" id="live-dot"></span><span id="live-txt">connecting…</span></div>
+</aside>
+
+<main>
+  <div class="top"><div><h1 id="title">Overview</h1><p id="subtitle"></p></div><div class="actions" id="top-actions"></div></div>
+
+  <!-- OVERVIEW -->
+  <section class="page active" id="p-overview">
+    <div class="grid kpis" id="kpis"></div>
+    <div class="grid three" style="margin-top:14px">
+      <div class="card"><h3>Latest detections <span class="r"><button class="btn" onclick="go('detections')">View all</button></span></h3><div class="feed" id="ov-feed"></div></div>
+      <div class="card"><h3>Content rollout</h3><div id="ov-rollout" class="pad"></div></div>
+      <div class="card"><h3>Risk DB by OWASP LLM Top 10</h3><div id="ov-owasp" class="pad"></div></div>
+    </div>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card"><h3>Detections by kind (24 h)</h3><div id="ov-kinds" class="pad"></div></div>
+      <div class="card"><h3>Fleet</h3><div id="ov-fleet" class="pad"></div></div>
+    </div>
+  </section>
+
+  <!-- DETECTIONS -->
+  <section class="page" id="p-detections">
+    <div class="toolbar">
+      <input class="search" id="det-q" placeholder="Search host, command, file, category…">
+      <div class="chips" id="det-kinds"></div>
+    </div>
+    <div class="split">
+      <div class="card"><div class="scroll"><table><thead><tr><th>Time</th><th>Action</th><th>Kind</th><th>Severity</th><th>What happened</th><th>Host</th></tr></thead><tbody id="det-rows"></tbody></table></div></div>
+      <div class="card detail" id="det-detail"><div class="empty">Select a detection to see the process lineage, findings and evidence.</div></div>
+    </div>
+  </section>
+
+  <!-- ENDPOINTS -->
+  <section class="page" id="p-endpoints">
+    <div class="split">
+      <div class="card"><div class="scroll"><table><thead><tr><th></th><th>Host</th><th>OS</th><th>Ring</th><th>Mode</th><th>Content</th><th>Blocked</th><th>Last seen</th></tr></thead><tbody id="ep-rows"></tbody></table></div></div>
+      <div class="card detail" id="ep-detail"><div class="empty">Select an endpoint.</div></div>
+    </div>
+  </section>
+
+  <!-- RISK DB -->
+  <section class="page" id="p-riskdb">
+    <div class="toolbar">
+      <input class="search" id="rdb-q" placeholder="Search pattern, category or ID…">
+      <select class="inp" id="rdb-type"><option value="">All types</option><option>PHRASE</option><option>REGEX</option><option>VECTOR</option><option>DLP</option></select>
+      <select class="inp" id="rdb-status"><option value="">All statuses</option><option>ACTIVE</option><option>PENDING_REVIEW</option><option>DISABLED</option></select>
+      <select class="inp" id="rdb-source"><option value="">All sources</option><option>SEED</option><option>LEARNED</option><option>ANALYST</option><option>THREAT_INTEL</option></select>
+      <button class="btn primary" onclick="newEntryForm()">+ Add entry</button>
+    </div>
+    <div class="split">
+      <div class="card"><div class="scroll"><table><thead><tr><th>ID</th><th>Type</th><th>Pattern</th><th>Category</th><th>OWASP</th><th>ATLAS</th><th>Source</th><th>Status</th><th>Hits</th></tr></thead><tbody id="rdb-rows"></tbody></table></div></div>
+      <div class="card detail" id="rdb-detail"><div class="empty">Select an entry, or add a new one.<br><br>New entries start as <b>PENDING_REVIEW</b> and reach endpoints only through a gated, signed content release.</div></div>
+    </div>
+  </section>
+
+  <!-- RELEASES -->
+  <section class="page" id="p-releases">
+    <div class="card"><h3>Rollout rings <span class="r small muted">An endpoint in a ring receives the newest release promoted to that ring or later</span></h3><div class="rings" id="rings"></div></div>
+    <div class="card" style="margin-top:14px"><h3>Releases <span class="r"><button class="btn primary" id="build-btn" onclick="buildRelease()">Build &amp; gate new release</button></span></h3>
+      <div class="scroll"><table><thead><tr><th>Version</th><th>Status</th><th>Ring</th><th>Entries</th><th>Gate recall</th><th>Benign FPs</th><th>SHA-256</th><th>Built by</th><th>When</th><th></th></tr></thead><tbody id="rel-rows"></tbody></table></div>
+    </div>
+    <div class="card" style="margin-top:14px" id="rel-detail"></div>
+  </section>
+
+  <!-- DEPLOY -->
+  <section class="page" id="p-deploy">
+    <div class="grid two">
+      <div class="card"><h3>1 · Enrollment token</h3><div class="pad">
+        <p class="small muted" style="margin-top:0">Each tenant enrolls endpoints with a secret token. The agent exchanges it for its own identity and pins the content-signing key.</p>
+        <div class="toolbar"><input class="inp" id="tok-tenant" value="default" style="width:180px"><button class="btn primary" onclick="newToken()">Generate token</button></div>
+        <div class="code mono small" id="tok-out">Demo token: enroll-demo-default</div>
+        <div class="section"><h4>Signing key</h4><div class="code mono small" id="pubkey">…</div></div>
+      </div></div>
+      <div class="card"><h3>2 · Install &amp; run</h3><div class="pad small">
+        <div class="section" style="margin-top:0"><h4>macOS / Windows / Linux (user-space sensors)</h4>
+        <div class="code mono" id="cmd-run"></div></div>
+        <div class="section"><h4>Linux kernel checkpoint (eBPF LSM, root)</h4>
+        <div class="code mono">cd agent/kernel/linux &amp;&amp; make &amp;&amp; sudo ./checkpoint-loader --enforce</div>
+        <p class="muted">Denies AI-agent access to credentials and unapproved egress inside the kernel, before the syscall completes. checkpointd fills the policy maps.</p></div>
+        <div class="section"><h4>Fleet rollout</h4><p class="muted">Package with Intune, Jamf, Samsung Knox or Ansible; set the token via <span class="mono">CHECKPOINTD_ENROLL_TOKEN</span>. Put 1–2% of machines in the CANARY ring.</p></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- AUDIT -->
+  <section class="page" id="p-audit">
+    <div class="card"><div class="scroll"><table><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead><tbody id="audit-rows"></tbody></table></div></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const RINGS = ["CANARY","EARLY","BROAD","GA"];
+const PAGES = {overview:["Overview","Endpoint fleet, detections and threat content at a glance"],
+  detections:["Detections","What checkpointd blocked, sanitized or flagged on endpoints"],
+  endpoints:["Endpoints","Enrolled agents, their rollout ring, enforcement mode and content version"],
+  riskdb:["AI Risk DB","Persistent threat content: signatures, regex, DLP and semantic vectors mapped to OWASP and MITRE ATLAS"],
+  releases:["Content releases","Snapshot → quality gate → Ed25519 signature → ring rollout, with one-click rollback"],
+  deploy:["Deploy agents","Enroll new endpoints"], audit:["Audit log","Every admin, analyst and system change"]};
+const KIND_IC = {EXEC:"⚙", FILE:"📄", EGRESS:"🌐", SAFE_MODE:"🛟", CONTENT_LOAD_FAILED:"⛔", CONTENT_UPDATED:"📦", AGENT_STARTED:"▶"};
+const KEY = (()=>{try{return localStorage.getItem("aiedr_key")||""}catch(e){return ""}})();
+let page = "overview", state = {events:[], agents:[], entries:[], releases:[], selDet:null, selEp:null, selEntry:null, selRel:null, detKind:"THREATS"};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ago = ts => { if(!ts) return "never"; const s = Date.now()/1000 - ts; return s<60?`${Math.max(0,s|0)}s ago`:s<3600?`${s/60|0}m ago`:s<86400?`${s/3600|0}h ago`:`${s/86400|0}d ago`; };
+const time = ts => new Date(ts*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+const pill = (cls, t) => `<span class="pill ${cls}">${esc(t)}</span>`;
+async function api(path, opt={}) {
+  const r = await fetch(path, {...opt, headers:{"Content-Type":"application/json", ...(KEY?{"X-AI-EDR-Key":KEY}:{})}});
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m } catch(e){} throw new Error(m); }
+  return r.json();
+}
+function toast(msg, err) { const t = $("#toast"); t.textContent = msg; t.className = "toast" + (err?" err":""); t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(()=>t.style.display="none", 4200); }
+function go(p) {
+  page = p;
+  document.querySelectorAll(".nav[data-page]").forEach(n => n.classList.toggle("active", n.dataset.page === p));
+  document.querySelectorAll(".page").forEach(s => s.classList.toggle("active", s.id === "p-" + p));
+  $("#title").textContent = PAGES[p][0]; $("#subtitle").textContent = PAGES[p][1];
+  try { history.replaceState(null, "", "#" + p) } catch(e) {}
+  refresh();
+}
+document.querySelectorAll(".nav[data-page]").forEach(n => n.onclick = () => go(n.dataset.page));
+
+async function refresh() {
+  try {
+    if (page === "overview") await loadOverview();
+    if (page === "detections") await loadDetections();
+    if (page === "endpoints") await loadEndpoints();
+    if (page === "riskdb") await loadRiskDB();
+    if (page === "releases") await loadReleases();
+    if (page === "deploy") await loadDeploy();
+    if (page === "audit") await loadAudit();
+  } catch (e) { toast("Load failed: " + e.message, true); }
+}
+
+// ---------------------------------------------------------------- overview
+async function loadOverview() {
+  const [o, ev] = await Promise.all([api("/v1/cp/overview"), api("/v1/cp/events?limit=60")]);
+  const threats = ev.filter(isThreat);
+  $("#b-det").textContent = threats.length;
+  const blocked = (o.events_24h.by_action.KILLED||0) + (o.events_24h.by_action.SANITIZED||0) + (o.events_24h.by_action.QUARANTINED||0) + (o.events_24h.by_action.BLOCKED||0);
+  const cur = o.content.current;
+  $("#b-ep").textContent = o.agents.total; $("#b-rdb").textContent = o.risk_db.total;
+  $("#kpis").innerHTML = [
+    ["Endpoints online", `${o.agents.online}<span class="muted" style="font-size:15px"> / ${o.agents.total}</span>`, `${o.agents.by_health.SAFE_MODE||0} in safe mode`],
+    ["Threats stopped (24 h)", blocked, `${o.events_24h.by_action.ALERTED||0} alerts · ${o.events_24h.total} events`],
+    ["Gateway verdicts", o.gateway.requests, `${o.gateway.blocked} blocked · ${o.gateway.sanitized} sanitized`],
+    ["Risk DB entries", o.risk_db.total, `${o.risk_db.by_status.PENDING_REVIEW||0} pending review · ${o.risk_db.by_source.LEARNED||0} learned`],
+    ["Content in GA", cur ? "v" + (o.content.current.ring === "GA" ? cur.version : "–") : "–", cur ? `latest v${o.content.latest.version} · ${o.content.latest.status}` : "no release"],
+  ].map(([k,v,s]) => `<div class="card kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+  $("#ov-feed").innerHTML = threats.slice(0,7).map(feedRow).join("") || `<div class="empty">No threats on endpoints yet.</div>`;
+  const vers = Object.entries(o.agents.content_versions).sort((a,b)=>b[0]-a[0]);
+  $("#ov-rollout").innerHTML = (cur ? `<div class="small muted" style="margin-bottom:10px">Newest released: <b style="color:var(--text)">v${cur.version}</b> → ${pill("ring", cur.ring)} · gate recall ${pct(cur.gate.recall)} · ${cur.gate.false_positives} FP</div>` : "")
+    + hbars(vers.map(([v,n]) => ["content v" + v, n]), o.agents.total) || `<div class="empty">No agents</div>`;
+  $("#ov-owasp").innerHTML = hbars(Object.entries(o.risk_db.by_owasp).sort(), o.risk_db.total, OWASP);
+  $("#ov-kinds").innerHTML = hbars(Object.entries(o.events_24h.by_kind).sort((a,b)=>b[1]-a[1]), o.events_24h.total) || `<div class="empty">No events</div>`;
+  $("#ov-fleet").innerHTML = `<div class="grid two"><div><div class="section" style="margin-top:0"><h4>By ring</h4>${hbars(RINGS.map(r=>[r, o.agents.by_ring[r]||0]), o.agents.total)}</div></div>
+    <div><div class="section" style="margin-top:0"><h4>By OS</h4>${hbars(Object.entries(o.agents.by_os), o.agents.total)}</div><div class="section"><h4>By mode</h4>${hbars(Object.entries(o.agents.by_mode), o.agents.total)}</div></div></div>`;
+}
+const OWASP = {LLM01:"LLM01 Prompt injection", LLM02:"LLM02 Sensitive info", LLM06:"LLM06 Excessive agency", LLM07:"LLM07 System prompt leak"};
+const pct = x => x == null ? "–" : Math.round(x*1000)/10 + "%";
+function hbars(rows, total, labels={}) {
+  if (!rows.length) return "";
+  const max = Math.max(1, ...rows.map(r=>r[1]));
+  return `<div class="hbars">${rows.map(([k,n]) => `<div class="hbar"><span title="${esc(labels[k]||k)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(labels[k]||k)}</span><div class="t"><i style="width:${n/max*100}%"></i></div><span class="c">${n}</span></div>`).join("")}</div>`;
+}
+function isThreat(e) { return ["EXEC","FILE","EGRESS"].includes(e.kind); }
+function feedRow(e) {
+  return `<div class="row" onclick="openDet('${e.id}')"><div class="ic2">${KIND_IC[e.kind]||"•"}</div><div class="ttl"><b>${esc(e.title)}</b><span>${esc(e.hostname)} · ${pill("a-"+e.action, e.action)} ${pill("sev-"+e.severity, e.severity)}</span></div><div class="when">${ago(e.ts)}</div></div>`;
+}
+
+// ---------------------------------------------------------------- detections
+const DET_KINDS = [["THREATS","Threats"],["EXEC","Commands"],["FILE","Files"],["EGRESS","Network"],["HEALTH","Agent health"],["ALL","All"]];
+$("#det-kinds").innerHTML = DET_KINDS.map(([k,l]) => `<button class="chip" data-k="${k}">${l}</button>`).join("");
+document.querySelectorAll("#det-kinds .chip").forEach(c => c.onclick = () => { state.detKind = c.dataset.k; renderDetections(); });
+$("#det-q").oninput = () => renderDetections();
+async function loadDetections() { state.events = await api("/v1/cp/events?limit=500"); renderDetections(); }
+function renderDetections() {
+  document.querySelectorAll("#det-kinds .chip").forEach(c => c.classList.toggle("on", c.dataset.k === state.detKind));
+  const q = $("#det-q").value.toLowerCase(), k = state.detKind;
+  const rows = state.events.filter(e => (k==="ALL" || (k==="THREATS" && isThreat(e)) || (k==="HEALTH" && !isThreat(e)) || e.kind===k)
+    && (!q || JSON.stringify(e).toLowerCase().includes(q)));
+  $("#b-det").textContent = state.events.filter(isThreat).length;
+  $("#det-rows").innerHTML = rows.map(e => `<tr class="click ${state.selDet===e.id?"sel":""}" onclick="openDet('${e.id}')"><td class="mono small">${time(e.ts)}</td><td>${pill("a-"+e.action,e.action)}</td><td>${KIND_IC[e.kind]||""} ${esc(e.kind)}</td><td>${pill("sev-"+e.severity,e.severity)}</td><td class="wrap">${esc(e.title)}</td><td class="muted">${esc(e.hostname)}</td></tr>`).join("")
+    || `<tr><td colspan="6"><div class="empty">No matching events.</div></td></tr>`;
+  if (state.selDet) showDet(state.events.find(e => e.id === state.selDet));
+}
+async function openDet(id) {
+  if (page !== "detections") { go("detections"); await loadDetections(); }
+  state.selDet = id; renderDetections();
+}
+function showDet(e) {
+  if (!e) return;
+  const d = e.detail || {}, p = e.process || {};
+  const colors = {KILLED:"#3b1219",SANITIZED:"#3a2a0b",QUARANTINED:"#3b1219",ALERTED:"#2a1f47"};
+  const verb = {KILLED:"Command killed", SANITIZED:"File sanitized", QUARANTINED:"File quarantined", ALERTED:"Alert raised",
+    EXITED_BEFORE_KILL:"Detected (process had already exited)", OBSERVED:"Observed"}[e.action] || e.action;
+  let html = `<div class="banner"><div class="big" style="background:${colors[e.action]||"#1c2742"}">${KIND_IC[e.kind]||"•"}</div><div><h2>${esc(verb)}</h2><p>${esc(e.title)}</p></div></div><div class="pad">
+    <div class="kv"><div>Host</div><div>${esc(e.hostname)} <span class="muted mono small">${esc(e.agent_id)}</span></div>
+    <div>When</div><div>${new Date(e.ts*1000).toLocaleString()}</div><div>Category</div><div>${esc(e.category)} ${pill("sev-"+e.severity,e.severity)}</div>
+    <div>Agent mode</div><div>${pill("mode-"+(d.mode||""), d.mode||"?")}</div><div>Content</div><div>v${e.content_version}</div></div>`;
+  if (p.lineage && p.lineage.length) {
+    let chain = [...p.lineage].reverse();
+    const rootAt = chain.findIndex(n => p.ai_root && n.pid === p.ai_root.pid);
+    const hidden = rootAt > 0 ? rootAt : 0;
+    chain = chain.slice(hidden);
+    const short = c => c.length > 170 ? c.slice(0, 170) + " …" : c;
+    html += `<div class="section"><h4>Process lineage (AI agent → blocked command)</h4><div class="tree">
+      ${hidden ? `<div class="muted small" style="margin-bottom:4px">${hidden} ancestor process(es) above the AI agent (IDE, shell, launchd) not shown</div>` : ""}
+      ${chain.map((n,i) => {
+      const isAi = p.ai_root && n.pid === p.ai_root.pid, isBad = i === chain.length-1;
+      return `<div class="n ${isBad?"bad":isAi?"ai":""}" style="--d:${i}"><b>${esc(n.name)}</b> <span class="muted">pid ${n.pid}${isAi?" · AI agent":""}${isBad&&e.action==="KILLED"?" · killed":""}</span><br><span title="${esc(n.cmdline)}">${esc(short(n.cmdline))}</span></div>`; }).join("")}</div></div>`;
+  } else if (p.cmdline) {
+    html += `<div class="section"><h4>Process</h4><div class="code mono small">${esc(p.cmdline)}</div></div>`;
+  }
+  if (d.path) html += `<div class="section"><h4>File</h4><div class="kv"><div>Path</div><div class="mono small" style="word-break:break-all">${esc(d.path)}</div>
+    <div>SHA-256</div><div class="mono small">${esc((d.sha256||"").slice(0,32))}…</div>${d.sanitized_path?`<div>Clean copy</div><div class="mono small" style="word-break:break-all">${esc(d.sanitized_path)}</div>`:""}
+    ${d.quarantined_to?`<div>Quarantined to</div><div class="mono small" style="word-break:break-all">${esc(d.quarantined_to)}</div>`:""}</div></div>`;
+  if (d.remote_ip) html += `<div class="section"><h4>Connection</h4><div class="code mono small">${esc(d.remote_ip)}:${esc(d.remote_port)}</div></div>`;
+  if (d.findings && d.findings.length) html += `<div class="section"><h4>Findings</h4>${d.findings.map(f => `<div class="finding"><span>${pill("sev-"+f.severity,f.severity)}</span><span><b>${esc(f.category)}</b> <span class="muted">${esc(f.detector)} · ${f.score}${f.signature_id?" · "+esc(f.signature_id):""}</span></span>${f.evidence?`<div class="ev">${esc(f.evidence)}</div>`:""}</div>`).join("")}</div>`;
+  if (d.error) html += `<div class="section"><h4>Error</h4><div class="code mono small">${esc(d.error)}</div></div>`;
+  $("#det-detail").innerHTML = html + "</div>";
+}
+
+// ---------------------------------------------------------------- endpoints
+async function loadEndpoints() {
+  state.agents = await api("/v1/cp/agents");
+  $("#ep-rows").innerHTML = state.agents.map(a => `<tr class="click ${state.selEp===a.agent_id?"sel":""}" onclick="openEp('${a.agent_id}')">
+    <td><span class="dot ${!a.online?"off":a.health==="SAFE_MODE"?"amber":"on"}"></span></td><td><b>${esc(a.hostname)}</b><div class="muted small mono">${esc(a.agent_id)}</div></td>
+    <td>${esc(a.os)} <span class="muted small">${esc(a.os_version)}</span></td><td>${pill("ring",a.ring)}</td><td>${pill("mode-"+a.mode,a.mode)}</td>
+    <td>v${a.content_version}</td><td>${(a.stats?.exec_blocked||0)+(a.stats?.files_quarantined||0)}</td><td class="muted">${ago(a.last_seen)}</td></tr>`).join("")
+    || `<tr><td colspan="8"><div class="empty">No agents enrolled yet. See <a href="#deploy" onclick="go('deploy')" style="color:var(--blue)">Deploy agents</a>.</div></td></tr>`;
+  if (state.selEp) openEp(state.selEp, true);
+}
+async function openEp(id, quiet) {
+  state.selEp = id;
+  if (!quiet) document.querySelectorAll("#ep-rows tr").forEach(r => r.classList.toggle("sel", r.getAttribute("onclick").includes(id)));
+  const a = await api("/v1/cp/agents/" + id), s = a.stats || {};
+  $("#ep-detail").innerHTML = `<div class="banner"><div class="big" style="background:#13243f">🖥</div><div><h2>${esc(a.hostname)}</h2><p>${a.online?"Online":"Offline"} · ${esc(a.os)} ${esc(a.os_version)} · agent ${esc(a.agent_version)} · ${pill(a.health==="SAFE_MODE"?"s-SAFE_MODE":"s-HEALTHY", a.health)}</p></div></div><div class="pad">
+    <div class="toolbar"><label class="small muted">Ring</label><select class="inp" onchange="setAgent('${id}','ring',this.value)">${RINGS.map(r=>`<option ${r===a.ring?"selected":""}>${r}</option>`).join("")}</select>
+    <label class="small muted">Mode</label><select class="inp" onchange="setAgent('${id}','mode',this.value)">${["ENFORCE","MONITOR"].map(m=>`<option ${m===a.mode?"selected":""}>${m}</option>`).join("")}</select></div>
+    <div class="kv"><div>Agent ID</div><div class="mono small">${esc(a.agent_id)}</div><div>Tenant</div><div>${esc(a.tenant_id)}</div><div>Content</div><div>v${a.content_version} · ${s.content_entries||0} entries</div>
+    <div>Sensors</div><div>${(a.sensors||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join(" ")}</div><div>Uptime</div><div>${Math.round((s.uptime_s||0)/60)} min</div>
+    <div>Enrolled</div><div>${new Date(a.enrolled_at*1000).toLocaleString()}</div><div>Last seen</div><div>${ago(a.last_seen)} · ${esc(a.ip)}</div></div>
+    <div class="section"><h4>Checkpoint counters</h4><div class="kv">
+      <div>Commands checked</div><div>${s.exec_checked||0} · <b>${s.exec_blocked||0} killed</b> · ${s.exec_alerts||0} alerts</div>
+      <div>Files scanned</div><div>${s.files_scanned||0} · <b>${s.files_sanitized||0} sanitized</b> · ${s.files_quarantined||0} quarantined</div>
+      <div>Egress alerts</div><div>${s.egress_alerts||0}</div><div>Content updates</div><div>${s.content_updates||0} ok · ${s.content_failures||0} rejected</div>
+      <div>Offline outbox</div><div>${s.outbox||0} queued</div></div></div>
+    <div class="section"><h4>Recent events</h4><div class="feed">${a.events.slice(0,12).map(feedRow).join("")||'<div class="empty">None</div>'}</div></div></div>`;
+}
+async function setAgent(id, key, val) {
+  try { await api(`/v1/cp/agents/${id}?${key}=${val}`, {method:"POST"}); toast(`${key} → ${val}. The agent applies it on its next heartbeat.`); loadEndpoints(); }
+  catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- risk DB
+["#rdb-type","#rdb-status","#rdb-source"].forEach(s => $(s).onchange = loadRiskDB);
+let rdbT; $("#rdb-q").oninput = () => { clearTimeout(rdbT); rdbT = setTimeout(loadRiskDB, 250); };
+async function loadRiskDB() {
+  const qs = new URLSearchParams({q:$("#rdb-q").value, type:$("#rdb-type").value, status:$("#rdb-status").value, source:$("#rdb-source").value});
+  const r = await api("/v1/cp/risk-entries?" + qs);
+  state.entries = r.entries; $("#b-rdb").textContent = r.stats.total;
+  $("#rdb-rows").innerHTML = r.entries.map(e => `<tr class="click ${state.selEntry===e.id?"sel":""}" onclick="openEntry('${e.id}')"><td class="mono small">${esc(e.id)}</td><td><span class="tag">${e.type}</span></td>
+    <td class="wrap mono small">${esc(e.pattern.slice(0,90))}${e.pattern.length>90?"…":""}</td><td class="small">${esc(e.category)}</td><td><span class="tag">${e.owasp}</span></td><td class="mono small">${e.atlas}</td>
+    <td class="small">${e.source}${e.tier==="TENANT"?` <span class="muted">· ${esc(e.tenant_id)}</span>`:""}</td><td>${pill("s-"+e.status,e.status)}</td><td>${e.hits}</td></tr>`).join("")
+    || `<tr><td colspan="9"><div class="empty">No entries match.</div></td></tr>`;
+}
+function openEntry(id) {
+  state.selEntry = id; const e = state.entries.find(x => x.id === id); if (!e) return;
+  document.querySelectorAll("#rdb-rows tr").forEach(r => r.classList.toggle("sel", r.getAttribute("onclick")?.includes(`'${id}'`)));
+  const act = (st, label, cls="") => `<button class="btn ${cls}" onclick="entryStatus('${id}','${st}')">${label}</button>`;
+  $("#rdb-detail").innerHTML = `<div class="banner"><div class="big" style="background:#13243f">🗄</div><div><h2>${esc(e.category)}</h2><p>${e.type} · ${e.tier}${e.tenant_id?" ("+esc(e.tenant_id)+")":""} · ${pill("s-"+e.status,e.status)}</p></div></div><div class="pad">
+    <div class="code mono small" style="margin-top:0">${esc(e.pattern)}</div>
+    <div class="section"><div class="kv"><div>ID</div><div class="mono small">${esc(e.id)}</div><div>Severity</div><div>${pill("sev-"+e.severity,e.severity)}</div>
+    <div>OWASP LLM</div><div>${esc(OWASP[e.owasp]||e.owasp)}</div><div>MITRE ATLAS</div><div class="mono">${e.atlas}</div><div>Language</div><div>${e.language}</div>
+    <div>Source</div><div>${e.source} · by ${esc(e.created_by)}</div><div>Hits / FP reports</div><div>${e.hits} / ${e.fp_reports}</div>
+    <div>Created</div><div>${new Date(e.created_at*1000).toLocaleString()}</div>${e.notes?`<div>Notes</div><div>${esc(e.notes)}</div>`:""}</div></div>
+    <div class="section"><h4>Actions</h4><div class="toolbar">${e.status!=="ACTIVE"?act("ACTIVE", e.status==="PENDING_REVIEW"?"✓ Approve":"Re-activate","primary"):""}
+    ${e.status!=="DISABLED"?act("DISABLED","Disable","danger"):""}<button class="btn" onclick="entryFP('${id}')">Report false positive</button></div>
+    <p class="small muted">Changes reach endpoints in the next gated, signed release (Content releases).</p></div></div>`;
+}
+async function entryStatus(id, st) { try { await api(`/v1/cp/risk-entries/${id}/status?status=${st}`, {method:"POST"}); toast(`${id} → ${st}`); await loadRiskDB(); openEntry(id); } catch(e) { toast(e.message, true); } }
+async function entryFP(id) { try { await api(`/v1/cp/risk-entries/${id}/false-positive`, {method:"POST"}); toast("False positive recorded"); await loadRiskDB(); openEntry(id); } catch(e) { toast(e.message, true); } }
+function newEntryForm() {
+  state.selEntry = null;
+  const cats = ["INSTRUCTION_OVERRIDE","JAILBREAK","SYSTEM_PROMPT_EXTRACTION","INDIRECT_PDF_POISONING","DATA_EXFILTRATION","TOOL_HIJACK","ROLE_OVERRIDE","SECRET_LEAK","PII_LEAK","IP_LEAK"];
+  $("#rdb-detail").innerHTML = `<div class="banner"><div class="big" style="background:#13243f">＋</div><div><h2>New Risk DB entry</h2><p>Starts as PENDING_REVIEW unless you choose ACTIVE</p></div></div><div class="pad"><div class="form">
+    <div><label>Type</label><select class="inp" id="ne-type"><option>PHRASE</option><option>REGEX</option><option>VECTOR</option><option>DLP</option></select></div>
+    <div><label>Category</label><select class="inp" id="ne-cat">${cats.map(c=>`<option>${c}</option>`).join("")}</select></div>
+    <div class="full"><label>Pattern (phrase, regex, or example attack text for VECTOR)</label><textarea class="inp" id="ne-pat" rows="3"></textarea></div>
+    <div><label>Severity</label><select class="inp" id="ne-sev"><option>CRITICAL</option><option selected>HIGH</option><option>MEDIUM</option></select></div>
+    <div><label>Status</label><select class="inp" id="ne-st"><option>PENDING_REVIEW</option><option>ACTIVE</option></select></div>
+    <div><label>Tier</label><select class="inp" id="ne-tier"><option>GLOBAL</option><option>TENANT</option></select></div>
+    <div><label>Tenant (TENANT tier)</label><input class="inp" id="ne-ten" value="default"></div>
+    <div class="full"><label>Notes</label><input class="inp" id="ne-notes"></div>
+    <div class="full"><button class="btn primary" onclick="createEntry()">Create entry</button></div></div></div>`;
+}
+async function createEntry() {
+  const body = {type:$("#ne-type").value, category:$("#ne-cat").value, pattern:$("#ne-pat").value.trim(), severity:$("#ne-sev").value,
+    status:$("#ne-st").value, tier:$("#ne-tier").value, tenant_id:$("#ne-tier").value==="TENANT"?$("#ne-ten").value:null, notes:$("#ne-notes").value};
+  if (body.pattern.length < 6) return toast("Pattern is too short", true);
+  try { const e = await api("/v1/cp/risk-entries", {method:"POST", body:JSON.stringify(body)}); toast("Created " + e.id); await loadRiskDB(); openEntry(e.id); }
+  catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- releases
+async function loadReleases() {
+  const [rels, agents] = await Promise.all([api("/v1/cp/releases"), api("/v1/cp/agents")]);
+  state.releases = rels;
+  const live = rels.filter(r => r.status === "RELEASED");
+  $("#rings").innerHTML = RINGS.map((ring, i) => {
+    const rel = live.find(r => RINGS.indexOf(r.ring) >= i), n = agents.filter(a => a.ring === ring);
+    const onIt = rel ? n.filter(a => a.content_version === rel.version).length : 0;
+    return `<div class="rg"><div class="n">${ring}</div><div class="v">${rel?"v"+rel.version:"–"}</div><div class="s">${n.length} endpoint(s) · ${onIt} on it</div></div>`; }).join("");
+  $("#rel-rows").innerHTML = rels.map(r => {
+    const next = r.status === "TESTED" ? "CANARY" : r.status === "RELEASED" && r.ring !== "GA" ? RINGS[RINGS.indexOf(r.ring)+1] : null;
+    return `<tr class="click ${state.selRel===r.version?"sel":""}" onclick="openRel(${r.version})"><td><b>v${r.version}</b></td><td>${pill("s-"+r.status,r.status)}</td><td>${r.ring?pill("ring",r.ring):"<span class='muted'>–</span>"}</td>
+    <td>${r.entry_count}</td><td>${pct(r.gate.recall)}</td><td>${r.gate.false_positives}</td><td class="mono small">${r.sha256.slice(0,12)}…</td><td class="small">${esc(r.created_by)}</td><td class="muted small">${ago(r.created_at)}</td>
+    <td onclick="event.stopPropagation()">${next?`<button class="btn primary" onclick="promote(${r.version},'${next}')">Promote → ${next}</button> `:""}${r.status==="RELEASED"?`<button class="btn danger" onclick="rollback(${r.version})">Roll back</button>`:""}</td></tr>`; }).join("");
+  if (state.selRel == null && rels.length) state.selRel = rels[0].version;
+  openRel(state.selRel, true);
+}
+function openRel(v, quiet) {
+  state.selRel = v; const r = state.releases.find(x => x.version === v); if (!r) return;
+  if (!quiet) document.querySelectorAll("#rel-rows tr").forEach(tr => tr.classList.toggle("sel", tr.getAttribute("onclick") === `openRel(${v})`));
+  const g = r.gate;
+  $("#rel-detail").innerHTML = `<h3>Quality gate · v${r.version} ${pill(g.passed?"s-TESTED":"s-GATE_FAILED", g.passed?"PASSED":"FAILED")}<span class="r small muted">${esc(r.notes||"")}</span></h3><div class="pad">
+    <div class="gate"><div><b>${pct(g.recall)}</b><span class="muted">attack recall (${g.attacks - g.missed.length}/${g.attacks})</span></div><div><b>${g.false_positives}</b><span class="muted">false positives on ${g.benign} benign texts</span></div>
+    <div><b>${r.entry_count}</b><span class="muted">entries signed</span></div><div><b>${g.duration_ms} ms</b><span class="muted">gate run time</span></div></div>
+    ${g.reasons.length?`<div class="section"><h4>Why it failed</h4>${g.reasons.map(x=>`<div class="finding"><span>${pill("sev-CRITICAL","BLOCKED")}</span><span>${esc(x)}</span></div>`).join("")}</div>`:""}
+    ${g.fp_samples.length?`<div class="section"><h4>False positives</h4>${g.fp_samples.map(f=>`<div class="finding"><span class="tag">${esc(f.matched)}</span><span class="mono small">${esc(f.text)}</span></div>`).join("")}</div>`:""}
+    ${g.missed.length?`<details class="section"><summary class="small muted">Missed attacks (${g.missed.length}) — caught on endpoints by Tier 2 / behavioral IOAs instead</summary>${g.missed.map(m=>`<div class="code mono small">${esc(m)}</div>`).join("")}</details>`:""}
+    <div class="section small muted">SHA-256 <span class="mono">${r.sha256}</span> · signed with Ed25519 per tenant at download.</div></div>`;
+}
+async function buildRelease() {
+  $("#build-btn").setAttribute("disabled","");
+  try { const r = await api("/v1/cp/releases?notes=" + encodeURIComponent("Built from the portal"), {method:"POST"}); state.selRel = r.version;
+    toast(r.status === "TESTED" ? `v${r.version} passed the gate. Promote it to CANARY to start the rollout.` : `v${r.version} FAILED the gate: ${r.gate.reasons.join("; ")}`, r.status !== "TESTED"); await loadReleases(); }
+  catch (e) { toast(e.message, true); } finally { $("#build-btn").removeAttribute("disabled"); }
+}
+async function promote(v, ring) { try { await api(`/v1/cp/releases/${v}/promote?ring=${ring}`, {method:"POST"}); toast(`v${v} promoted to ${ring}`); loadReleases(); } catch(e) { toast(e.message, true); } }
+async function rollback(v) { try { await api(`/v1/cp/releases/${v}/rollback?reason=` + encodeURIComponent("Rolled back from the portal"), {method:"POST"}); toast(`v${v} rolled back; endpoints return to the previous release on their next heartbeat`); loadReleases(); } catch(e) { toast(e.message, true); } }
+
+// ---------------------------------------------------------------- deploy / audit
+async function loadDeploy() {
+  const k = await api("/v1/cp/public-key");
+  $("#pubkey").innerHTML = `${k.algorithm} · key id ${esc(k.key_id)}<br>${esc(k.public_key)}`;
+  $("#cmd-run").innerHTML = esc(`python -m agent.checkpointd --server ${location.origin} --enroll-token enroll-demo-default --watch ~/work --watch ~/Downloads`);
+}
+async function newToken() {
+  try { const t = await api("/v1/cp/enroll-tokens?tenant_id=" + encodeURIComponent($("#tok-tenant").value), {method:"POST"});
+    $("#tok-out").textContent = `Tenant ${t.tenant_id}: ${t.enroll_token}  (shown once)`; } catch(e) { toast(e.message, true); }
+}
+async function loadAudit() {
+  const rows = await api("/v1/cp/audit");
+  $("#audit-rows").innerHTML = rows.map(r => `<tr><td class="mono small">${new Date(r.ts*1000).toLocaleString()}</td><td>${esc(r.actor)}</td><td><span class="tag">${esc(r.action)}</span></td><td class="mono small">${esc(r.target)}</td><td class="wrap mono small muted">${esc(JSON.stringify(r.detail))}</td></tr>`).join("");
+}
+
+// ---------------------------------------------------------------- live updates
+function connect() {
+  const es = new EventSource("/v1/ai-edr/events");
+  es.onopen = () => { $("#live-dot").className = "dot on"; $("#live-txt").textContent = "Live"; };
+  es.onerror = () => { $("#live-dot").className = "dot"; $("#live-txt").textContent = "Reconnecting…"; };
+  let t; const soon = () => { clearTimeout(t); t = setTimeout(refresh, 400); };
+  ["agent_event","cp_release","cp_agent","falcon_loop"].forEach(k => es.addEventListener(k, ev => {
+    const e = JSON.parse(ev.data);
+    if (k === "agent_event" && ["KILLED","SANITIZED","QUARANTINED"].includes(e.data.action)) toast(`${e.data.hostname}: ${e.data.title}`);
+    if (k === "cp_release" && e.data.status === "ROLLED_BACK" && String(e.data.actor||"").startsWith("system")) toast(`Auto-rollback of v${e.data.version}: ${e.data.reason}`, true);
+    soon();
+  }));
+}
+setInterval(() => { if (["overview","endpoints"].includes(page)) refresh(); }, 10000);
+connect();
+go(location.hash.slice(1) in PAGES ? location.hash.slice(1) : "overview");
+</script>
+</body>
+</html>

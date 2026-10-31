@@ -208,3 +208,43 @@ Also: browser ext, IDE hooks, gateway      │ red-team corpus, customer-shared 
 - [Endpoint security pricing benchmarks 2026](https://costbench.com/stats/endpoint-security-pricing-2026/)
 
 Vendor efficacy figures and third-party price figures are unverified. Confirm them before using any in a sales document.
+
+---
+
+## 2026-10-31: Built the endpoint agent, control plane, persistent AI Risk DB and fleet portal
+
+**Discussion:** "Code everything: agent, dashboard portal and DB." This is the first implementation of the kernel-checkpoint direction (§19) and of the product design above. Details are in [docs/FLEET_PLATFORM.md](docs/FLEET_PLATFORM.md) and architecture.md §20.
+
+**What was built**
+- **`checkpointd` endpoint agent** (`agent/checkpointd`):
+  - Exec, file and egress checkpoints, scoped to processes descended from an AI agent.
+  - Kill / sanitize / quarantine in ENFORCE mode; alert only in MONITOR mode.
+  - Safe mode after 2 unclean exits.
+  - Offline outbox.
+  - Signed content with the last good bundle kept.
+- **Linux kernel checkpoint** (`agent/kernel/linux`): a BPF LSM program plus a libbpf loader.
+  - Denies credential reads and unapproved egress *inside the syscall*.
+  - The kernel only enforces maps that `checkpointd` fills.
+- **Control plane** (`src/control_plane`, `/v1/cp`):
+  - The persistent AI Risk DB (SQLite → Postgres), mapped to OWASP LLM Top 10 and MITRE ATLAS.
+  - Agent enrollment, heartbeat and telemetry.
+  - Content pipeline: snapshot → quality gate → Ed25519 signature → CANARY/EARLY/BROAD/GA rings → auto-rollback.
+  - Learning loop from the gateway into the persistent DB.
+- **Portal** (`/portal`): overview, detections with process lineage, endpoints, Risk DB, releases, deploy, audit.
+
+**Results (measured on the MacBook)**
+- A hijacked agent's `curl … ~/.ssh/id_rsa` command was killed before the exfiltration step ran.
+- Poisoned PDF and README were sanitized; the clean file was untouched; normal commands were allowed.
+- A Korean zero-day learned at the gateway reached the CANARY endpoint as signed release v2 in about 5 s (gate: 88.6% recall, 0/40 false positives). BROAD stayed on v1 until promoted.
+- Tampered bundles were rejected. A release that fired on benign text failed the gate. Two failing canaries triggered auto-rollback.
+- Tests: 23 new; full suite 81 passed, 2 xfailed.
+
+**Bugs found while building**
+- **fork/exec race in the polling sensor.** A process seen between `fork` and `exec` still carries its parent's command line. Fix: young AI-lineage processes are re-judged when their command line changes. This is also the argument for kernel hooks, which have no such gap.
+- **The learning loop dropped confirmations.** A pending entry confirmed at the gateway stayed pending in the persistent DB. Fix: the gateway now reports confirmed texts too, and the DB promotes them.
+
+**Open questions / next steps**
+- Compile and test the BPF program on a real Linux kernel (≥ 5.7, `lsm=…,bpf`).
+- macOS Endpoint Security entitlement (needed for pre-exec deny and the file-open hook on Mac).
+- SSO/RBAC for the portal, Postgres + KMS signing key, and agent tamper protection.
+- Rename "Falcon" (trademark) before any commercial use. This is still open from the previous entry.

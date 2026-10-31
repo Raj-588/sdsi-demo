@@ -52,7 +52,7 @@ class FalconThreatFeed:
         policy = policy_store.for_tenant(cand.tenant_id).get("falcon_loop", {})
         text = cand.text.strip()
         result = {"quarantine_id": cand.quarantine_id, "category": cand.category, "text": text[:200],
-                  "source_platform": cand.source_platform}
+                  "source_platform": cand.source_platform, "tenant_id": cand.tenant_id, "severity": cand.severity}
 
         if not text or text.lower() in self.allow_list:
             result["action"] = "SKIPPED_ALLOW_LIST"
@@ -80,6 +80,7 @@ class FalconThreatFeed:
         # Also learn each instruction-bearing sentence on its own (minus "Note to AI:" style prefixes) so
         # paraphrases that reuse one clause are caught by Tier 3 too.
         evidence = [e.lower() for e in cand.evidence if len(e.strip()) >= 8]
+        learned = [text]                                      # reported to the control plane's persistent Risk DB
         for sentence in re.split(r"(?<=[.!?。])\s+|\n+", text):
             core = re.sub(r"^[^:：]{1,30}[:：]\s*", "", sentence.strip())
             # Only learn sentences a detector actually flagged; innocent sentences that merely shared
@@ -90,10 +91,13 @@ class FalconThreatFeed:
                 if near and near[0].similarity >= DEDUPE_SIMILARITY:
                     if status == "ACTIVE" and near[0].vector.status == "PENDING_REVIEW":
                         near[0].vector.status = "ACTIVE"     # confident re-observation confirms a pending entry
+                        learned.append(near[0].vector.text)
                 else:
                     self.vectors.upsert(core, cand.category, cand.severity, "FALCON_LOOP", status=status,
                                         meta={"quarantine_id": cand.quarantine_id, "parent": tv.vector_id}, vector=sv)
+                    learned.append(core)
         added_sig = False
+        result["learned_texts"] = learned
         if auto and len(text) <= 240:
             added_sig = self.signatures.add_phrase(f"falcon_{uuid.uuid4().hex[:8]}", text, cand.category,
                                                    cand.severity, "FALCON_LOOP")

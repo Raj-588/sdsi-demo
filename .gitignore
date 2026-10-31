@@ -9,3 +9,7 @@ models/
 presentation/build/
 presentation/Untitled presentation - Google Slides.html
 presentation/Untitled presentation - Google Slides_files/
+agent/kernel/linux/vmlinux.h
+agent/kernel/linux/*.o
+agent/kernel/linux/*.skel.h
+agent/kernel/linux/checkpoint-loader
