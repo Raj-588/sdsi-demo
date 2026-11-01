@@ -771,17 +771,18 @@ Constraints:
 
 ---
 
-## 20. Endpoint fleet platform (as built, 31 Oct 2026)
+## 20. Endpoint fleet platform (as built, 31 Oct 2026; Linux kernel verified and Windows added 1–2 Nov 2026)
 
 The first implementation of §19. Details, results and limits: [docs/FLEET_PLATFORM.md](docs/FLEET_PLATFORM.md).
 
 | §19 component | As built | Differs from the design |
 |---|---|---|
-| `checkpointd` | `agent/checkpointd/`: Python daemon reusing the gateway engine (`AIEDRGuard`) with local learning disabled | — |
+| `checkpointd` | `agent/checkpointd/`: Python daemon reusing the gateway engine (`AIEDRGuard`) with local learning disabled. Runs on macOS, Linux (root, with the BPF LSM) and Windows (SYSTEM scheduled task). On Windows, CI installs it, kills a live exfiltration attempt and sanitizes the poisoned files | Windows runs it as a scheduled task, not yet a protected (PPL) service |
 | File checkpoint | Workspace pre-scan (1 s sweep); poisoned file → 0400 quarantine + `<name>.sanitized.txt` | No kernel read hook on macOS yet (needs Endpoint Security entitlement); the shadow-copy redirect is replaced by a sanitized sibling file |
-| Exec checkpoint | 50 ms process-table poll, lineage rebuild, credential/egress/destructive rules + full pipeline; ENFORCE kills the process tree | Reactive (kill), not pre-exec deny, except on Linux with the BPF LSM program |
+| Exec checkpoint | 50 ms process-table poll, lineage rebuild, credential/egress/destructive rules + full pipeline (POSIX and Windows command forms); ENFORCE kills the process tree | Reactive (kill), not pre-exec deny, except with a kernel checkpoint: the Linux BPF LSM denies inside the syscall, and the Windows minifilter asks `checkpointd` before an AI-lineage process starts |
 | Network checkpoint | AI-lineage egress outside the allow-list → alert / kill | No transparent redirect to the local proxy yet |
-| Linux kernel | `agent/kernel/linux/checkpoint.bpf.c` (fork lineage, `bprm_check_security`, `file_open`, `socket_connect`) + libbpf loader; maps filled by `sensors/linux_ebpf.py` | Written, not yet compiled or run on a real kernel |
+| Linux kernel | `agent/kernel/linux/checkpoint.bpf.c` (fork lineage, AI agents recognised by name at exec, `bprm_check_security`, `file_open`, `socket_connect`) + libbpf loader; maps filled by `sensors/linux_ebpf.py` | Verified on Fedora 44 (kernel 6.19): 8 live kernel tests pass, and it builds on Ubuntu 24.04 in CI. IPv4 egress only |
+| Windows kernel | `agent/kernel/windows/` minifilter (`IRP_MJ_CREATE` deny on protected paths) + process-creation callback (lineage, pre-start verdict from `checkpointd`, 250 ms fail-open); `sensors/windows_driver.py` bridge; `agent/windows/install.ps1` (SYSTEM task) | Built in CI; not yet loaded (needs test signing or attestation signing, and a Microsoft-assigned altitude). Egress stays in user space until a WFP callout exists |
 | Local Risk DB replica | Signed per-tenant bundle, verified (Ed25519 + SHA-256) and hot-swapped into the signature trie and vector index; last good bundle cached on disk | — |
 | Control plane | `src/control_plane/` mounted at `/v1/cp` in the gateway app; SQLite (WAL) schema ready for Postgres | Single node |
 | Content pipeline | Snapshot → gate (35 attacks, 40 benign; any FP fails) → sign → rings CANARY/EARLY/BROAD/GA → auto-rollback when ≥ 2 agents fail | — |

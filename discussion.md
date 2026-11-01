@@ -248,3 +248,48 @@ Vendor efficacy figures and third-party price figures are unverified. Confirm th
 - macOS Endpoint Security entitlement (needed for pre-exec deny and the file-open hook on Mac).
 - SSO/RBAC for the portal, Postgres + KMS signing key, and agent tamper protection.
 - Rename "Falcon" (trademark) before any commercial use. This is still open from the previous entry.
+
+---
+
+## 2026-11-02: Linux kernel checkpoint verified in a real kernel; Windows agent, minifilter and CI
+
+**Discussion:** "Is the code complete end to end?" The demo ran end to end, but the product did not: the BPF program had never been compiled, and there was no Windows agent or installer. Then: "make it and make the agent for windo[ws] machine as well."
+
+**Linux kernel checkpoint: built and verified**
+- **Where:** a Fedora 44 VM (Lima on the MacBook), kernel 6.19 arm64, btrfs root.
+- **Results:**
+  - The verifier accepts all 6 programs, and 8/8 live kernel tests pass.
+  - Full suite as root, with the program attached: 116 passed.
+  - In the demo, a native agent that exfiltrated immediately was stopped in the kernel at `connect()`. The polling sensor never saw it.
+- **CI:** GitHub's Ubuntu 24.04 runner (kernel 7.0, x86_64) also builds it. The kernel tests skip there because Ubuntu does not enable the BPF LSM.
+- **Bugs only a real kernel showed:**
+  - **Compile errors.** A map named `config` clashed with a name in the generated kernel headers (renamed `cp_config`); `bpf_endian.h` was missing.
+  - **Stale pinned maps.** Pins left by a previous run swallowed the protection rules. Fix: the loader clears the pins and waits until the program is attached.
+  - **btrfs device numbers.** `stat().st_dev` is not the kernel's `i_sb->s_dev`, so files in home folders were not protected. Fix: take the device from `/proc/self/mountinfo`.
+  - **Registration race.** An agent that acts the moment it starts beat the user-space registration. Fix: the kernel now recognises AI agents by name at exec. The Windows driver does the same at process creation.
+  - **Leaked loaders.** Loader processes outlived tests that died. Fix: `PR_SET_PDEATHSIG`.
+
+**Windows: agent verified in CI, driver built**
+- **Agent:**
+  - Windows command forms: `%USERPROFILE%`, `$env:USERPROFILE`, `curl.exe`, PowerShell download cmdlets.
+  - Destructive commands are blocked: shadow-copy deletion, `wbadmin`, `bcdedit`, `cipher /w`.
+  - Download-or-execute abuse of `certutil`, `bitsadmin`, `mshta`, `regsvr32` and `rundll32` raises an alert.
+  - Running as SYSTEM, it protects every user's credential stores, including Credential Manager, DPAPI keys and browser passwords.
+- **Installer:** `install.ps1` registers a SYSTEM scheduled task that starts at boot and restarts if it exits.
+- **Minifilter (`checkpoint.sys`):**
+  - Tracks AI lineage at process creation.
+  - Asks `checkpointd` before an AI-lineage process starts. A block verdict fails the creation; with no answer in 250 ms, the process is allowed (fail open).
+  - Denies AI-lineage opens of credential paths in `IRP_MJ_CREATE`.
+- **CI results:**
+  - The agent installed as SYSTEM, enrolled, sanitized the poisoned README and PDF, and killed the hijacked agent's `curl.exe` exfiltration before it ran. The control plane received the events with process lineage.
+  - The driver compiles with `/W4 /WX`, passes InfVerif and Inf2Cat, and has `/INTEGRITYCHECK` set.
+- **Bugs CI found:**
+  - **Service crash on start (product bug).** The SYSTEM service crashed on start because Python read the Risk DB seed (Korean text) in the Windows ANSI code page. Tests had hidden this with `PYTHONUTF8=1`. Fix: explicit UTF-8 for all text I/O, and the service also runs with `-X utf8`.
+  - **Quarantine collision (product bug).** Quarantining the same file twice failed on Windows, because rename never overwrites.
+  - **Driver packaging (build setup).** The WDK needed 64-bit MSBuild and `FilesToPackage`.
+
+**Open questions / next steps**
+- Load the driver on a Windows VM with test signing on. For production: attestation signing and an altitude assigned by Microsoft (385210 is a placeholder).
+- Kernel egress: a WFP callout on Windows; IPv6 in the Linux `connect()` hook.
+- Tamper protection for the Windows agent (protected service).
+- Linux fleets on Ubuntu need `lsm=…,bpf` on the kernel command line, or they run on the user-space sensors only.
