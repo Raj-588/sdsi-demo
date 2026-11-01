@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 import psutil
 
 EXEC_RECHECK_S = 3.0
-INTERPRETERS = {"python", "python3", "node", "bun", "deno", "ruby", "perl", "java", "sh", "bash", "zsh"}
+INTERPRETERS = {"python", "pythonw", "py", "node", "bun", "deno", "ruby", "perl", "java", "sh", "bash", "zsh", "cmd",
+                "powershell", "pwsh"}
 
 
 @dataclass
@@ -48,7 +49,14 @@ def _info(p: psutil.Process) -> dict:
             user = p.username()
         except psutil.AccessDenied:
             user = "?"
-        return {"pid": p.pid, "ppid": p.ppid(), "name": p.name(), "cmdline": " ".join(cmd)[:600], "user": user}
+        return {"pid": p.pid, "ppid": p.ppid(), "name": p.name(), "cmdline": " ".join(cmd)[:600], "user": user,
+                "argv": cmd[:2]}
+
+
+def _stem(path: str) -> str:
+    """Lower-case program name without directory or .exe, for both / and \\ paths: C:\\Tools\\Claude.exe -> claude"""
+    name = path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return name[:-4] if name.endswith(".exe") else name
 
 
 class ProcessSensor:
@@ -64,12 +72,12 @@ class ProcessSensor:
             self._maybe_track_existing(pid)
 
     def is_ai(self, info: dict) -> bool:
-        argv = info["cmdline"].split()
-        names = [info["name"].lower()]
+        argv = info.get("argv") or info["cmdline"].split()
+        names = [_stem(info["name"])]
         if argv:
-            names.append(os.path.basename(argv[0]).lower())
-            if os.path.basename(argv[0]).lower().rstrip("0123456789.") in INTERPRETERS and len(argv) > 1:
-                names.append(os.path.basename(argv[1]).lower())
+            names.append(_stem(argv[0]))
+            if names[-1].rstrip("0123456789.") in INTERPRETERS and len(argv) > 1:
+                names.append(_stem(argv[1]))
         return any(p in n for p in self.patterns for n in names)
 
     def _maybe_track_existing(self, pid: int) -> None:

@@ -1,0 +1,68 @@
+;
+; CheckPoint Zero AI-EDR kernel checkpoint (file-system minifilter + process-creation callback)
+;
+; Test machine (test signing on: bcdedit /set testsigning on, reboot):
+;   pnputil /add-driver checkpoint.inf /install
+;   fltmc load checkpoint
+;
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = "ActivityMonitor"
+ClassGuid   = {b86dff51-a31e-4bac-b3cf-e8cfe75c9fc2}
+Provider    = %ManufacturerName%
+DriverVer   = 11/01/2026,1.0.0.0
+CatalogFile = checkpoint.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+MiniFilter.DriverFiles = 13
+
+[DefaultInstall.NTamd64]
+OptionDesc = %ServiceDescription%
+CopyFiles  = MiniFilter.DriverFiles
+
+[DefaultInstall.NTamd64.Services]
+AddService = %ServiceName%,,MiniFilter.Service
+
+[DefaultUninstall.NTamd64]
+LegacyUninstall = 1
+
+[DefaultUninstall.NTamd64.Services]
+DelService = %ServiceName%,0x200
+
+[MiniFilter.Service]
+DisplayName    = %ServiceName%
+Description    = %ServiceDescription%
+ServiceBinary  = %13%\%DriverName%.sys
+Dependencies   = "FltMgr"
+ServiceType    = 2                         ; SERVICE_FILE_SYSTEM_DRIVER
+StartType      = 3                         ; SERVICE_DEMAND_START (installer switches to boot/auto after a healthy run)
+ErrorControl   = 1                         ; SERVICE_ERROR_NORMAL: a load failure never stops Windows from booting
+LoadOrderGroup = "FSFilter Activity Monitor"
+AddReg         = MiniFilter.AddRegistry
+
+[MiniFilter.AddRegistry]
+HKR,,"SupportedFeatures",0x00010001,0x3
+HKR,"Instances","DefaultInstance",0x00000000,%DefaultInstance%
+HKR,"Instances\"%Instance1.Name%,"Altitude",0x00000000,%Instance1.Altitude%
+HKR,"Instances\"%Instance1.Name%,"Flags",0x00010001,%Instance1.Flags%
+
+[MiniFilter.DriverFiles]
+%DriverName%.sys
+
+[SourceDisksFiles]
+checkpoint.sys = 1,,
+
+[SourceDisksNames]
+1 = %DiskId1%,,,
+
+[Strings]
+ManufacturerName   = "CheckPoint Zero"
+ServiceDescription = "CheckPoint Zero AI-EDR kernel checkpoint"
+ServiceName        = "checkpoint"
+DriverName         = "checkpoint"
+DiskId1            = "CheckPoint Zero Installation Disk"
+DefaultInstance    = "CheckPoint Zero Instance"
+Instance1.Name     = "CheckPoint Zero Instance"
+Instance1.Altitude = "385210"              ; test value in the Activity Monitor range; production needs an altitude from Microsoft
+Instance1.Flags    = 0x0

@@ -14,6 +14,7 @@ import platform
 import shutil
 import signal
 import socket
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -24,9 +25,9 @@ from . import VERSION
 from .client import ControlPlaneClient
 from .config import AgentConfig
 from .engine import LocalEngine
-from .sensors import linux_ebpf
+from .sensors import linux_ebpf, windows_driver
 from .sensors.files import FileSensor
-from .sensors.process import EgressSensor, ProcessSensor
+from .sensors.process import EgressSensor, ProcessSensor, _info
 from .state import AgentState
 
 log = logging.getLogger("checkpointd")
@@ -38,7 +39,9 @@ class Checkpointd:
         self.state = AgentState(cfg.state_dir)
         self.client = ControlPlaneClient(cfg.server)
         self.engine: LocalEngine | None = None
-        self.kernel: linux_ebpf.KernelCheckpoint | None = None
+        self.kernel: linux_ebpf.KernelCheckpoint | windows_driver.KernelCheckpoint | None = None
+        self._engine_lock = threading.Lock()           # the minifilter bridge judges execs on its own threads
+        self._kernel_judged: dict[int, float] = {}     # pids the kernel already judged before they ran
         self.mode = "ENFORCE"
         self.ring = "?"
         self.safe_mode = False
@@ -72,8 +75,15 @@ class Checkpointd:
         self.sensors = [self.procs.name, self.net.name] + ([self.files.name] if self.cfg.watch_dirs else [])
         if linux_ebpf.available():
             self.kernel = linux_ebpf.KernelCheckpoint(enforce=self.effective_mode == "ENFORCE")
-            self.kernel.start(self.cfg.protected_paths, self.cfg.egress_allow)
-            self.sensors.insert(0, self.kernel.name)
+        elif windows_driver.available():
+            self.kernel = windows_driver.KernelCheckpoint(enforce=self.effective_mode == "ENFORCE", judge=self._kernel_judge)
+        if self.kernel:
+            try:
+                self.kernel.start(self.cfg.protected_paths, self.cfg.egress_allow, self.cfg.ai_processes)
+                self.sensors.insert(0, self.kernel.name)
+            except Exception as exc:               # kernel component broken: keep running on user-space sensors
+                log.error("kernel checkpoint unavailable (%s); user-space sensors only", exc)
+                self.kernel = None
         if self.safe_mode:
             log.warning("SAFE MODE: %d unclean starts in a row; enforcement disabled until a healthy run", crashes - 1)
             self.emit("SAFE_MODE", "HIGH", "OBSERVED", "AGENT_HEALTH",
@@ -110,10 +120,11 @@ class Checkpointd:
     # ------------------------------------------------------------------ main tick
     def tick(self, now: float | None = None) -> None:
         now = now or time.time()
-        for ev in self.procs.poll():
-            self.handle_exec(ev)
         if self.kernel:
             self.kernel_tick()
+        for ev in self.procs.poll():
+            if ev.pid not in self._kernel_judged:    # already decided in the kernel before it ran
+                self.handle_exec(ev)
         if now >= self._next["file"]:
             self._next["file"] = now + self.cfg.file_poll_s
             for path in self.files.poll():
@@ -136,7 +147,8 @@ class Checkpointd:
     def handle_exec(self, ev) -> None:
         self.stats["exec_checked"] += 1
         try:
-            j = self.engine.judge_exec(ev.cmdline, ev.lineage)
+            with self._engine_lock:
+                j = self.engine.judge_exec(ev.cmdline, ev.lineage)
         except Exception as exc:  # fail open: never break the user's tools on a detector bug
             log.error("exec judge failed: %s", exc)
             return
@@ -155,24 +167,47 @@ class Checkpointd:
                            "ai_root": ev.ai_root},
                   detail={"findings": j.findings, "matched_entries": j.matched_entries})
 
+    def _kernel_judge(self, pid: int, ppid: int, root_pid: int, image: str, cmdline: str) -> tuple[bool, dict | None]:
+        """Windows minifilter asks before an AI-lineage process starts (runs on the bridge's threads)."""
+        with self._engine_lock:
+            j = self.engine.judge_exec(cmdline.split(), [{"pid": pid, "ppid": ppid, "name": image, "cmdline": cmdline}])
+        if j.verdict == "ALLOW":
+            return False, None
+        return j.verdict == "BLOCK" and self.effective_mode == "ENFORCE", vars(j)
+
     def kernel_tick(self) -> None:
-        """Linux BPF LSM: register new AI roots in the kernel map and turn kernel events into detections."""
+        """Register new AI roots in the kernel tables and turn kernel events into detections."""
         for pid, root in list(self.procs.ai_pids.items()):
             if root.get("pid") == pid:
                 self.kernel.register_ai_root(pid)
+        cutoff = time.time() - 30
+        self._kernel_judged = {p: t for p, t in self._kernel_judged.items() if t > cutoff}
         for k in self.kernel.drain():
-            root = {"pid": k["root_pid"]}
+            root = self.procs.ai_pids.get(k["root_pid"]) or {"pid": k["root_pid"]}
             if k["kind"] == "EXEC":
-                from .sensors.process import ExecEvent
-                lineage = [{"pid": k["pid"], "ppid": k["ppid"], "name": k["comm"], "cmdline": k["cmdline"]}]
-                self.handle_exec(ExecEvent(k["pid"], k["cmdline"].split(), lineage, root))
+                continue        # Linux: the poll sensor judges the full command line (with its fork/exec re-check)
+            if k["kind"] == "EXEC_JUDGED":
+                self._kernel_judged[k["pid"]] = time.time()
+                self.stats["exec_checked"] += 1
+                j = k["judgement"]
+                if not j:
+                    continue
+                action = "BLOCKED" if k["deny"] else "ALERTED"
+                self.stats["exec_blocked" if k["deny"] else "exec_alerts"] += 1
+                log.warning("EXEC %s in kernel [%s %s] pid=%s %s :: %s", action, j["severity"], j["category"], k["pid"],
+                            k["cmdline"][:160], j["reason"])
+                self.emit("EXEC", j["severity"], action, j["category"], j["reason"] + (" — denied before it ran" if k["deny"] else ""),
+                          process={"pid": k["pid"], "cmdline": k["cmdline"][:600], "lineage": _lineage(k), "ai_root": root},
+                          detail={"findings": j["findings"], "matched_entries": j["matched_entries"], "kernel": True})
             elif k["kind"] in ("FILE_DENY", "FILE_SEEN"):
                 action = "BLOCKED" if k["denied"] else "ALERTED"
+                log.warning("FILE %s in kernel [CRITICAL SECRET_ACCESS] %s (AI lineage) opened %s", action, k["comm"], k["path"])
                 self.emit("FILE", "CRITICAL", action, "SECRET_ACCESS",
                           f"{k['comm']} (AI lineage) opened credential file {k['path']}" + (" — denied in kernel" if k["denied"] else ""),
                           process={"pid": k["pid"], "cmdline": k["comm"], "ai_root": root}, detail={"path": k["path"], "kernel": True})
             elif k["kind"] in ("NET_DENY", "NET_SEEN"):
                 action = "BLOCKED" if k["denied"] else "ALERTED"
+                log.warning("EGRESS %s in kernel [HIGH AGENT_EGRESS] %s (AI lineage) -> %s:%s", action, k["comm"], k["daddr"], k["dport"])
                 self.emit("EGRESS", "HIGH", action, "AGENT_EGRESS",
                           f"{k['comm']} (AI lineage) connect to {k['daddr']}:{k['dport']}" + (" — denied in kernel" if k["denied"] else ""),
                           process={"pid": k["pid"], "cmdline": k["comm"], "ai_root": root},
@@ -185,7 +220,8 @@ class Checkpointd:
             return
         self.stats["files_scanned"] += 1
         try:
-            j, sanitized = self.engine.scan_file(path, data)
+            with self._engine_lock:
+                j, sanitized = self.engine.scan_file(path, data)
         except Exception as exc:
             log.error("file scan failed for %s: %s", path, exc)
             return
@@ -282,7 +318,8 @@ class Checkpointd:
         version = bundle.get("manifest", {}).get("version", 0)
         old = self.engine.content_version
         try:
-            self.engine.apply_bundle(bundle, self.public_key)
+            with self._engine_lock:
+                self.engine.apply_bundle(bundle, self.public_key)
         except Exception as exc:
             self._content_failed(version, exc)
             return
@@ -321,6 +358,17 @@ class Checkpointd:
             self.client.send_events(events)
         except Exception:
             self.state.queue_events(events)       # offline: deliver later; ids make retries idempotent
+
+
+def _lineage(k: dict) -> list[dict]:
+    """The would-be process plus its live ancestors (a denied process never existed)."""
+    out = [{"pid": k["pid"], "ppid": k["ppid"], "name": k["comm"], "cmdline": k["cmdline"][:600]}]
+    try:
+        parent = psutil.Process(k["ppid"])
+        out += [_info(p) for p in [parent] + parent.parents()[:6]]
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        pass
+    return out
 
 
 def kill_tree(pid: int) -> bool:

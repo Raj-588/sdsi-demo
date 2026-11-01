@@ -3,7 +3,8 @@
 The kernel program (agent/kernel/linux/checkpoint.bpf.c) denies credential reads and unapproved egress by
 AI-lineage processes *inside the syscall*, so there is no fork/exec or polling race. checkpointd keeps the
 maps up to date:
-  ai_pids          AI agent roots found by the process sensor (the kernel inherits them on fork)
+  ai_comms         AI agent process names; the kernel marks a matching process as an AI root when it execs
+  ai_pids          AI agent roots found by the process sensor, e.g. interpreted agents (the kernel inherits them on fork)
   protected_inodes (dev, ino) of every file under the protected credential paths
   egress_allow     IPv4 addresses of the allowed LLM / dev endpoints
 
@@ -45,6 +46,7 @@ def _map_update(name: str, key: bytes, value: bytes) -> None:
 
 class KernelCheckpoint:
     name = "ebpf-lsm"
+    judges_exec = False             # exec is reported, not judged, in the kernel; the poll sensor judges command lines
 
     def __init__(self, enforce: bool):
         self.enforce = enforce
@@ -53,25 +55,28 @@ class KernelCheckpoint:
         self._proc: subprocess.Popen | None = None
         self._registered: set[int] = set()
 
-    def start(self, protected_paths: list[Path], allow_domains: list[str]) -> None:
+    def start(self, protected_paths: list[Path], allow_domains: list[str], ai_names: list[str] = ()) -> None:
+        shutil.rmtree(PIN, ignore_errors=True)             # stale pins from a crashed run would swallow our updates
         args = [str(LOADER)] + (["--enforce"] if self.enforce else [])
         self._proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        ready = self._proc.stderr.readline()               # "checkpoint-loader: attached (...)" or the load error
+        if "attached" not in ready:
+            self._proc.kill()
+            raise RuntimeError(f"checkpoint-loader failed: {ready.strip() or self._proc.wait()}")
         threading.Thread(target=self._reader, daemon=True).start()
-        for _ in range(50):
-            if (PIN / "config").exists():
-                break
-            threading.Event().wait(0.1)
-        self.protect(protected_paths)
+        for name in ai_names:                              # comm is at most 15 bytes + NUL
+            _map_update("ai_comms", name.encode()[:15].ljust(16, b"\0"), b"\x01")
+        n = self.protect(protected_paths)
         self.allow(allow_domains)
-        log.info("kernel checkpoint attached (%s)", "ENFORCE" if self.enforce else "MONITOR")
+        log.info("kernel checkpoint attached (%s), %d credential files protected", "ENFORCE" if self.enforce else "MONITOR", n)
 
     def protect(self, roots: list[Path]) -> int:
         n = 0
+        mounts = _mounts()
         for root in roots:
             files = [root] if root.is_file() else [p for p in root.rglob("*") if p.is_file()] if root.is_dir() else []
             for f in files:
-                st = f.stat()
-                _map_update("protected_inodes", struct.pack("<QQ", _kdev(st.st_dev), st.st_ino), b"\x01")
+                _map_update("protected_inodes", struct.pack("<QQ", _sb_dev(f, mounts), f.stat().st_ino), b"\x01")
                 n += 1
         return n
 
@@ -114,9 +119,29 @@ class KernelCheckpoint:
     def stop(self) -> None:
         if self._proc:
             self._proc.terminate()
+            try:
+                self._proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
         shutil.rmtree(PIN, ignore_errors=True)
 
 
-def _kdev(dev: int) -> int:
-    """User-space st_dev -> the kernel's internal dev_t encoding (MKDEV: major << 20 | minor)."""
-    return (os.major(dev) << 20) | os.minor(dev)
+def _mounts() -> list[tuple[str, int]]:
+    """(mount point, superblock dev) from mountinfo, longest mount point first."""
+    out = []
+    for line in Path("/proc/self/mountinfo").read_text().splitlines():
+        f = line.split()
+        major, minor = map(int, f[2].split(":"))
+        out.append((f[4].replace("\\040", " "), (major << 20) | minor))   # kernel dev_t encoding: MKDEV
+    return sorted(out, key=lambda m: len(m[0]), reverse=True)
+
+
+def _sb_dev(path: Path, mounts: list[tuple[str, int]]) -> int:
+    """The dev the kernel sees in file->f_inode->i_sb->s_dev. Not st_dev: on btrfs, stat() reports a per-subvolume
+    anonymous device, while mountinfo carries the superblock's."""
+    p = str(path.resolve())
+    for mount_point, dev in mounts:
+        if p == mount_point or p.startswith(mount_point.rstrip("/") + "/"):
+            return dev
+    st = path.stat()
+    return (os.major(st.st_dev) << 20) | os.minor(st.st_dev)

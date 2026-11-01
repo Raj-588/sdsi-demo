@@ -6,15 +6,55 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HOME = Path.home()
+IS_WINDOWS = os.name == "nt"
 
 # Process names / command lines that identify an AI agent. Everything those processes start is "AI lineage".
 DEFAULT_AI_PROCESSES = ["claude", "gemini", "cursor", "aider", "codex", "copilot", "windsurf", "ollama", "llama-server",
                         "lm-studio", "open-interpreter", "goose", "continue"]
 
-# Credentials an AI agent has no business reading or sending anywhere.
-DEFAULT_PROTECTED = [HOME / ".ssh", HOME / ".aws", HOME / ".config" / "gcloud", HOME / ".azure", HOME / ".kube",
-                     HOME / ".docker" / "config.json", HOME / ".netrc", HOME / ".git-credentials", HOME / ".npmrc",
-                     HOME / ".pypirc"]
+# Credentials an AI agent has no business reading or sending anywhere, relative to each user's home.
+POSIX_SECRETS = [".ssh", ".aws", ".config/gcloud", ".config/gh/hosts.yml", ".azure", ".kube", ".docker/config.json",
+                 ".netrc", ".git-credentials", ".npmrc", ".pypirc"]
+WINDOWS_SECRETS = [".ssh", ".aws", ".azure", ".kube", ".docker/config.json", "_netrc", ".git-credentials", ".npmrc",
+                   ".pypirc", "AppData/Roaming/gcloud", "AppData/Roaming/GitHub CLI", "AppData/Roaming/Microsoft/Credentials",
+                   "AppData/Local/Microsoft/Credentials", "AppData/Roaming/Microsoft/Protect",
+                   "AppData/Local/Google/Chrome/User Data/Default/Login Data",
+                   "AppData/Local/Microsoft/Edge/User Data/Default/Login Data"]
+_NOT_USERS = {"public", "default", "default user", "all users", "shared", "guest", "lost+found"}
+
+
+def _privileged() -> bool:
+    if IS_WINDOWS:
+        if "systemprofile" in str(HOME).lower():           # running as LocalSystem (the installed service)
+            return True
+        try:
+            import ctypes
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except (AttributeError, OSError):
+            return False
+    return os.geteuid() == 0
+
+
+def user_homes() -> list[Path]:
+    """The current user's home; every local user's home when the agent runs as root / SYSTEM (as a service)."""
+    homes = [HOME]
+    if _privileged():
+        root = Path(os.getenv("SystemDrive", "C:") + "\\Users") if IS_WINDOWS else Path("/Users" if os.uname().sysname == "Darwin" else "/home")
+        try:
+            homes += sorted(p for p in root.iterdir() if p.is_dir() and p.name.lower() not in _NOT_USERS)
+        except OSError:
+            pass
+        if not IS_WINDOWS and Path("/root").is_dir():
+            homes.append(Path("/root"))
+    return [h for h in dict.fromkeys(homes) if "systemprofile" not in str(h).lower()]
+
+
+def default_protected() -> list[Path]:
+    rel = WINDOWS_SECRETS if IS_WINDOWS else POSIX_SECRETS
+    return [h / r for h in user_homes() for r in rel]
+
+
+DEFAULT_PROTECTED = default_protected()
 
 # Destinations AI agents may talk to. Anything else from AI lineage is an egress alert (or a kill with --block-egress).
 DEFAULT_EGRESS_ALLOW = ["api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com", "claude.ai",
@@ -34,7 +74,7 @@ def _list(env: str, default: list) -> list:
 class AgentConfig:
     server: str = os.getenv("CHECKPOINTD_SERVER", "http://127.0.0.1:8080")
     enroll_token: str = os.getenv("CHECKPOINTD_ENROLL_TOKEN", "enroll-demo-default")
-    state_dir: Path = Path(os.getenv("CHECKPOINTD_STATE_DIR", str(HOME / ".checkpointd")))
+    state_dir: Path = Path(os.getenv("CHECKPOINTD_STATE_DIR", str(HOME / ".checkpointd")))       # service: %ProgramData%\\checkpointd
     watch_dirs: list[Path] = field(default_factory=lambda: [Path(p).expanduser() for p in _list("CHECKPOINTD_WATCH", [])])
     ai_processes: list[str] = field(default_factory=lambda: _list("CHECKPOINTD_AI_PROCESSES", DEFAULT_AI_PROCESSES))
     protected_paths: list[Path] = field(default_factory=lambda: list(DEFAULT_PROTECTED))

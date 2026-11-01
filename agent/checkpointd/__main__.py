@@ -30,6 +30,7 @@ def main() -> None:
     ap.add_argument("--ring", choices=["CANARY", "EARLY", "BROAD", "GA"], default=cfg.ring)
     ap.add_argument("--block-egress", action="store_true", default=cfg.block_egress)
     ap.add_argument("--heartbeat", type=float, default=cfg.heartbeat_s)
+    ap.add_argument("--log-file", type=Path, help="log here instead of stderr (service installs)")
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
 
@@ -39,7 +40,7 @@ def main() -> None:
         cfg.watch_dirs = [p.expanduser().resolve() for p in a.watch]
     if a.ai_process:
         cfg.ai_processes = a.ai_process
-    logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
+    logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO, filename=a.log_file, encoding="utf-8",
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s", datefmt="%H:%M:%S")
     for noisy in ("httpx", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

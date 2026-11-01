@@ -5,12 +5,14 @@
  * Design rule: the kernel never parses content. It enforces small policy maps that the user-space
  * daemon (checkpointd) fills, and reports what it saw through a ring buffer:
  *
+ *   ai_comms         process names of AI agents (claude, cursor, ...): an exec'd AI agent is tracked at once
  *   ai_pids          pids of AI agents and everything they spawn (inherited on fork, in-kernel)
  *   protected_inodes credential files (~/.ssh/id_*, ~/.aws/credentials, ...) by (dev, ino)
  *   egress_allow     IPv4 addresses AI-lineage processes may connect to
- *   config           [0] = enforce (1) / monitor (0)
+ *   cp_config        [0] = enforce (1) / monitor (0)   (pinned as "config")
  *
  * Hooks
+ *   sched_process_exec  a process whose new name is in ai_comms becomes an AI root (no user-space race)
  *   sched_process_fork  child of an AI pid becomes an AI pid (lineage tracked without user space)
  *   bprm_check_security every exec in AI lineage is reported (user space judges the command line)
  *   file_open           AI lineage opening a protected credential file -> -EPERM
@@ -20,6 +22,7 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_core_read.h>
+#include <bpf/bpf_endian.h>
 
 #define EPERM 1
 #define AF_INET 2
@@ -29,6 +32,7 @@ char LICENSE[] SEC("license") = "GPL";
 enum event_kind { EV_EXEC = 1, EV_FILE_DENY = 2, EV_NET_DENY = 3, EV_FILE_SEEN = 4, EV_NET_SEEN = 5 };
 
 struct inode_key { __u64 dev; __u64 ino; };
+struct comm_key { char name[16]; };
 
 struct event {
 	__u32 kind;
@@ -44,9 +48,10 @@ struct event {
 };
 
 struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 65536); __type(key, __u32); __type(value, __u32); } ai_pids SEC(".maps");
+struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 256); __type(key, struct comm_key); __type(value, __u8); } ai_comms SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 4096); __type(key, struct inode_key); __type(value, __u8); } protected_inodes SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 4096); __type(key, __u32); __type(value, __u8); } egress_allow SEC(".maps");
-struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, 4); __type(key, __u32); __type(value, __u32); } config SEC(".maps");
+struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, 4); __type(key, __u32); __type(value, __u32); } cp_config SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 1 << 20); } events SEC(".maps");
 
 static __always_inline __u32 *ai_root(void)
@@ -57,7 +62,7 @@ static __always_inline __u32 *ai_root(void)
 
 static __always_inline int enforcing(void)
 {
-	__u32 k = 0, *v = bpf_map_lookup_elem(&config, &k);
+	__u32 k = 0, *v = bpf_map_lookup_elem(&cp_config, &k);
 	return v && *v == 1;
 }
 
@@ -74,6 +79,19 @@ static __always_inline struct event *new_event(__u32 kind, __u32 root)
 	e->root_pid = root;
 	bpf_get_current_comm(e->comm, sizeof(e->comm));
 	return e;
+}
+
+SEC("tp_btf/sched_process_exec")
+int BPF_PROG(on_exec_done, struct task_struct *p, pid_t old_pid, struct linux_binprm *bprm)
+{
+	struct comm_key k = {};
+	__u32 pid = BPF_CORE_READ(p, tgid);
+	if (bpf_map_lookup_elem(&ai_pids, &pid))
+		return 0;
+	bpf_get_current_comm(k.name, sizeof(k.name));     /* already the new program's name here */
+	if (bpf_map_lookup_elem(&ai_comms, &k))
+		bpf_map_update_elem(&ai_pids, &pid, &pid, BPF_ANY);
+	return 0;
 }
 
 SEC("tp_btf/sched_process_fork")
@@ -126,7 +144,7 @@ int BPF_PROG(on_file_open, struct file *file, int ret)
 	if (e) {
 		e->ino = k.ino;
 		e->denied = deny;
-		bpf_d_path(&file->f_path, e->path, sizeof(e->path));
+		bpf_d_path((struct path *)&file->f_path, e->path, sizeof(e->path));
 		bpf_ringbuf_submit(e, 0);
 	}
 	return deny ? -EPERM : 0;

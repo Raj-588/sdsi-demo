@@ -10,7 +10,9 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include "checkpoint.skel.h"
@@ -78,6 +80,7 @@ static int pin(struct bpf_map *m, const char *name)
 int main(int argc, char **argv)
 {
 	int enforce = argc > 1 && strcmp(argv[1], "--enforce") == 0;
+	prctl(PR_SET_PDEATHSIG, SIGTERM);   /* checkpointd gone -> detach; it reattaches when restarted */
 	struct checkpoint_bpf *skel = checkpoint_bpf__open_and_load();
 	if (!skel) {
 		fprintf(stderr, "load failed: is CONFIG_BPF_LSM enabled and 'bpf' in the lsm= boot parameter?\n");
@@ -89,14 +92,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	mkdir(PIN_DIR, 0700);
-	if (pin(skel->maps.ai_pids, "ai_pids") || pin(skel->maps.protected_inodes, "protected_inodes") ||
-	    pin(skel->maps.egress_allow, "egress_allow") || pin(skel->maps.config, "config")) {
+	if (pin(skel->maps.ai_pids, "ai_pids") || pin(skel->maps.ai_comms, "ai_comms") || pin(skel->maps.protected_inodes, "protected_inodes") ||
+	    pin(skel->maps.egress_allow, "egress_allow") || pin(skel->maps.cp_config, "config")) {
 		fprintf(stderr, "pinning maps under " PIN_DIR " failed: %s\n", strerror(errno));
 		checkpoint_bpf__destroy(skel);
 		return 1;
 	}
 	__u32 k = 0, v = enforce;
-	bpf_map__update_elem(skel->maps.config, &k, sizeof(k), &v, sizeof(v), BPF_ANY);
+	bpf_map__update_elem(skel->maps.cp_config, &k, sizeof(k), &v, sizeof(v), BPF_ANY);
 	struct ring_buffer *rb = ring_buffer__new(bpf_map__fd(skel->maps.events), handle, NULL, NULL);
 	signal(SIGINT, on_sig);
 	signal(SIGTERM, on_sig);

@@ -12,7 +12,7 @@ vmlinux.h:
 	$(BPFTOOL) btf dump file /sys/kernel/btf/vmlinux format c > $@
 
 checkpoint.bpf.o: checkpoint.bpf.c vmlinux.h
-	$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH) -c $< -o $@
+	$(CLANG) -g -O2 -Wall -Wno-missing-declarations -target bpf -D__TARGET_ARCH_$(ARCH) -c $< -o $@
 
 checkpoint.skel.h: checkpoint.bpf.o
 	$(BPFTOOL) gen skeleton $< > $@
