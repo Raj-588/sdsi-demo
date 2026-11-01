@@ -182,23 +182,28 @@ static VOID CpClearStrings(UNICODE_STRING *Table, ULONG *Count)
 /* \Device\...\Claude.exe -> is "claude" an AI agent name? */
 static BOOLEAN CpIsAiImage(PCUNICODE_STRING Image)
 {
-    UNICODE_STRING stem;
+    static const UNICODE_STRING exe = RTL_CONSTANT_STRING(L".exe");
+    UNICODE_STRING stem, ext;
     USHORT i, len, start = 0;
+    ULONG n;
     BOOLEAN hit = FALSE;
     if (Image == NULL || Image->Buffer == NULL || G.AiNameCount == 0)
         return FALSE;
-    len = Image->Length / sizeof(WCHAR);
+    len = (USHORT)(Image->Length / sizeof(WCHAR));
     for (i = 0; i < len; i++)
         if (Image->Buffer[i] == L'\\')
-            start = i + 1;
+            start = (USHORT)(i + 1);
     stem.Buffer = Image->Buffer + start;
-    stem.Length = (USHORT)((len - start) * sizeof(WCHAR));
-    if (stem.Length > 4 * sizeof(WCHAR) && _wcsnicmp(stem.Buffer + stem.Length / sizeof(WCHAR) - 4, L".exe", 4) == 0)
-        stem.Length -= 4 * sizeof(WCHAR);
-    stem.MaximumLength = stem.Length;
+    stem.Length = stem.MaximumLength = (USHORT)((len - start) * sizeof(WCHAR));
+    if (stem.Length > exe.Length) {
+        ext.Buffer = stem.Buffer + (stem.Length - exe.Length) / sizeof(WCHAR);
+        ext.Length = ext.MaximumLength = exe.Length;
+        if (RtlEqualUnicodeString(&ext, &exe, TRUE))
+            stem.Length = stem.MaximumLength = (USHORT)(stem.Length - exe.Length);
+    }
     FltAcquirePushLockShared(&G.ProtectedLock);
-    for (i = 0; i < G.AiNameCount && !hit; i++)
-        hit = RtlEqualUnicodeString(&G.AiNames[i], &stem, TRUE);
+    for (n = 0; n < G.AiNameCount && !hit; n++)
+        hit = RtlEqualUnicodeString(&G.AiNames[n], &stem, TRUE);
     FltReleasePushLock(&G.ProtectedLock);
     return hit;
 }
@@ -216,7 +221,7 @@ static VOID CpCopy(PWCH Dst, size_t Cch, PCUNICODE_STRING Src)
 static NTSTATUS CpSend(PCP_NOTIFY Msg, PCP_REPLY Reply, ULONG TimeoutMs)
 {
     LARGE_INTEGER timeout;
-    ULONG replyLength = Reply ? sizeof(*Reply) : 0;
+    ULONG replyLength = Reply ? (ULONG)sizeof(*Reply) : 0;
     if (G.ClientPort == NULL)
         return STATUS_PORT_DISCONNECTED;
     timeout.QuadPart = -10000LL * TimeoutMs;
@@ -286,7 +291,7 @@ static FLT_PREOP_CALLBACK_STATUS CpPreCreate(PFLT_CALLBACK_DATA Data, PCFLT_RELA
         return FLT_PREOP_SUCCESS_NO_CALLBACK;
 
     if (CpIsProtected(&name->Name)) {
-        deny = G.Enforce != 0;
+        deny = (BOOLEAN)(G.Enforce != 0);
         msg = ExAllocatePool2(POOL_FLAG_PAGED, sizeof(*msg), CP_TAG);
         if (msg) {
             msg->Kind = CpNotifyFile;

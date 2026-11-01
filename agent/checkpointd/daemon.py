@@ -236,7 +236,7 @@ class Checkpointd:
             detail["quarantined_to"] = str(qpath)
             if sanitized:
                 clean = path.with_name(path.name + ".sanitized.txt")
-                clean.write_text(_SANITIZED_HEADER.format(name=path.name, reason=j.reason) + sanitized)
+                clean.write_text(_SANITIZED_HEADER.format(name=path.name, reason=j.reason) + sanitized, encoding="utf-8")
                 self.files.ignore.add(str(clean))
                 detail["sanitized_path"] = str(clean)
                 action = "SANITIZED"
@@ -261,8 +261,11 @@ class Checkpointd:
     def _quarantine(self, path: Path, sha: str) -> Path:
         self.state.quarantine_dir.mkdir(exist_ok=True)
         dest = self.state.quarantine_dir / f"{sha[:16]}_{path.name}"
-        shutil.move(str(path), dest)
-        dest.chmod(0o400)
+        if dest.exists():                             # same file already quarantined (a Windows rename never overwrites)
+            path.unlink()
+        else:
+            shutil.move(str(path), dest)
+            dest.chmod(0o400)
         return dest
 
     # ------------------------------------------------------------------ control plane

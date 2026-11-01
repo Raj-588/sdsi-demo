@@ -116,6 +116,7 @@ def test_offline_outbox_delivers_later(tmp_path):
     assert len(sent) == queued and a.state.outbox_size() == 0
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell and signals; tests/test_agent_windows.py covers Windows")
 def test_kills_hijacked_agent_command(tmp_path):
     a = _agent(tmp_path)
     script = tmp_path / "demo_ai_agent.py"

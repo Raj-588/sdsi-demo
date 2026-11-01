@@ -1,0 +1,149 @@
+name: endpoint-agent
+
+on:
+  push:
+    branches: [Round_3_CheckPoint_Zero_AI_EDR]
+    paths: ["agent/**", "src/**", "tests/**", "demo/**", "config/**", "requirements.txt", ".github/workflows/endpoint-agent.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-agent:
+    name: Windows agent (tests + installed as SYSTEM + live attack)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+
+      - name: Agent and control-plane tests
+        run: python -m pytest -q tests/test_agent.py tests/test_agent_windows.py tests/test_control_plane.py
+
+      - name: Gateway + portal
+        shell: pwsh
+        run: |
+          Start-Process python -ArgumentList "-m","uvicorn","src.main:app","--port","8080" `
+            -RedirectStandardOutput server.log -RedirectStandardError server.err -WindowStyle Hidden
+          for ($i = 0; $i -lt 60; $i++) {
+            try { Invoke-RestMethod http://127.0.0.1:8080/healthz | Out-Null; break } catch { Start-Sleep 1 }
+          }
+          Invoke-RestMethod http://127.0.0.1:8080/healthz
+
+      - name: Install checkpointd as a SYSTEM task
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force C:\cpz\ws | Out-Null
+          New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
+          Set-Content "$env:USERPROFILE\.ssh\id_rsa" "-----BEGIN OPENSSH PRIVATE KEY----- (CI dummy key)"
+          .\agent\windows\install.ps1 -Watch C:\cpz\ws -AiProcess demo_ai_agent -Ring CANARY -Python (Get-Command python).Source
+          for ($i = 0; $i -lt 60; $i++) {
+            $agents = Invoke-RestMethod http://127.0.0.1:8080/v1/cp/agents
+            if ($agents.Count -ge 1) { break }
+            Start-Sleep 1
+          }
+          $agents | Format-Table agent_id, hostname, os, ring, mode, content_version
+          if ($agents.Count -lt 1) { Get-Content C:\ProgramData\checkpointd\checkpointd.log; throw "agent never enrolled" }
+          Start-Sleep 5          # let the file sensor index the workspace and the process sensor settle
+
+      - name: Live attack (hijacked AI agent + poisoned documents)
+        shell: pwsh
+        run: |
+          python demo/agent_attack_sim.py C:\cpz\ws
+          Start-Sleep 6
+          Get-Content C:\ProgramData\checkpointd\checkpointd.log
+          python -c "
+          import json, sys, urllib.request
+          events = json.load(urllib.request.urlopen('http://127.0.0.1:8080/v1/cp/events?limit=100'))
+          for e in events: print(e['kind'], e['action'], e['category'], '-', e['title'][:110])
+          killed = [e for e in events if e['kind'] == 'EXEC' and e['action'] == 'KILLED' and e['category'] == 'TOOL_HIJACK']
+          sanitized = [e for e in events if e['kind'] == 'FILE' and e['action'] == 'SANITIZED']
+          agent = json.load(urllib.request.urlopen('http://127.0.0.1:8080/v1/cp/agents'))[0]
+          print('agent:', agent['hostname'], agent['os'], 'sensors', agent.get('sensors'))
+          assert killed, 'exfil command was not killed'
+          assert len(sanitized) == 2, f'expected 2 sanitized files, got {len(sanitized)}'
+          lineage = killed[0]['process']['lineage']
+          print('KILLED lineage:', ' <- '.join(p['name'] for p in lineage[:4]))
+          print('OK: exfil killed, 2 poisoned files sanitized, events in the control plane')
+          "
+          if (Test-Path C:\cpz\ws\README.md) { throw "poisoned README was not quarantined" }
+          if (-not (Test-Path C:\cpz\ws\notes.md)) { throw "clean file was touched" }
+
+      - name: Uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          .\agent\windows\install.ps1 -Uninstall
+          if (Get-ScheduledTask -TaskName CheckPointZero-checkpointd -ErrorAction SilentlyContinue) { throw "task still registered" }
+
+      - name: Logs
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Content server.err -ErrorAction SilentlyContinue | Select-Object -Last 60
+          Get-Content C:\ProgramData\checkpointd\checkpointd.log -ErrorAction SilentlyContinue
+
+  windows-driver:
+    name: Windows minifilter (WDK build)
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build checkpoint.sys
+        run: msbuild agent\kernel\windows\checkpoint.vcxproj /p:Configuration=Release /p:Platform=x64 /v:minimal
+      - name: Check the driver binary
+        shell: pwsh
+        run: |
+          $sys = Get-ChildItem -Recurse agent\kernel\windows -Filter checkpoint.sys | Select-Object -First 1
+          if (-not $sys) { throw "checkpoint.sys not produced" }
+          "{0}  {1:N0} bytes" -f $sys.FullName, $sys.Length
+          $dumpbin = Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
+          $imports = & $dumpbin.FullName /imports $sys.FullName
+          $headers = & $dumpbin.FullName /headers $sys.FullName
+          foreach ($fn in "FltRegisterFilter", "FltCreateCommunicationPort", "FltSendMessage", "PsSetCreateProcessNotifyRoutineEx") {
+            if (-not ($imports -match $fn)) { throw "missing import $fn" }
+          }
+          if (-not ($headers -match "Force Integrity")) { throw "/INTEGRITYCHECK not set (PsSetCreateProcessNotifyRoutineEx would fail)" }
+          "imports and integrity flag OK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checkpoint-minifilter-unsigned
+          path: |
+            agent/kernel/windows/**/checkpoint.sys
+            agent/kernel/windows/checkpoint.inf
+
+  linux-bpf:
+    name: Linux BPF LSM (build + tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang llvm libbpf-dev libelf-dev zlib1g-dev linux-tools-common "linux-tools-$(uname -r)" \
+            || sudo apt-get install -y -q clang llvm libbpf-dev libelf-dev zlib1g-dev linux-tools-common linux-tools-generic
+      - name: Build BPF program and loader
+        run: |
+          BPFTOOL=$(ls /usr/lib/linux-tools/*/bpftool | head -1)     # the /usr/sbin wrapper only works for the running kernel's package
+          "$BPFTOOL" version; pkg-config --modversion libbpf || true
+          make -C agent/kernel/linux BPFTOOL="$BPFTOOL"
+          ls -la agent/kernel/linux/checkpoint.bpf.o agent/kernel/linux/checkpoint-loader
+      - run: python -m pip install -r requirements.txt
+      - name: Tests (kernel tests run only if this runner's kernel has bpf in its LSM list)
+        run: |
+          cat /sys/kernel/security/lsm; echo
+          sudo -E env PATH="$PATH:$(dirname $(ls /usr/lib/linux-tools/*/bpftool | head -1))" \
+            "$(command -v python)" -m pytest -q tests/test_kernel_linux.py tests/test_agent.py tests/test_control_plane.py -rs
