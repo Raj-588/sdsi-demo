@@ -663,7 +663,9 @@ Deployment: a Kubernetes DaemonSet or CronJob on servers and a light agent on en
 
 ---
 
-## 19. Future: CheckPoint Zero Kernel Agent
+## 19. CheckPoint Zero Kernel Agent (design)
+
+**Status (2 Nov 2026):** partly built. §20 lists what exists and where it differs from this design.
 
 Today AI-EDR guards the paths AI tools agree to use: the proxy, hooks, the browser extension and the SDK clients. The **Kernel Agent** moves the checkpoint into the operating system. It is one small agent per laptop or server, deployed the way an EDR sensor is. It hooks the kernel, so **every AI process passes through it whether or not the app cooperates**. The name is literal: the checkpoint sits at ring 0.
 
@@ -757,12 +759,12 @@ Rollout uses existing tooling: Intune, Jamf, Ansible, Samsung Knox.
 
 ### 19.7 Roadmap and constraints
 
-| Phase | Scope | Effort |
-|---|---|---|
-| P0 | Linux eBPF prototype: exec + connect-redirect for AI processes, calling the existing gateway | Days |
-| P1 | `checkpointd` with the embedded engine, file checkpoint with shadow copies, Risk DB replica sync | Weeks |
-| P2 | macOS Endpoint Security (needs an Apple entitlement), Windows minifilter (needs driver signing) | Months |
-| P3 | Tamper protection, fail-closed policies, fleet console, Falcon Loop pushed company-wide | Months |
+| Phase | Scope | Effort | Status (2 Nov 2026) |
+|---|---|---|---|
+| P0 | Linux eBPF prototype: exec + connect-redirect for AI processes, calling the existing gateway | Days | **Built**, and verified on Fedora 44. It denies in the kernel instead of redirecting connections |
+| P1 | `checkpointd` with the embedded engine, file checkpoint with shadow copies, Risk DB replica sync | Weeks | **Built.** The file checkpoint writes a sanitized sibling file instead of a shadow copy |
+| P2 | macOS Endpoint Security (needs an Apple entitlement), Windows minifilter (needs driver signing) | Months | **Windows minifilter built in CI**, not yet signed or loaded. macOS not started |
+| P3 | Tamper protection, fail-closed policies, fleet console, Falcon Loop pushed company-wide | Months | **Fleet console and signed ring rollout of learned content built.** Tamper protection and fail-closed policies not started |
 
 Constraints:
 - **Kernel stays thin.** A kernel bug can crash the machine, so all detection logic stays in user space and the kernel only enforces "ask the agent".

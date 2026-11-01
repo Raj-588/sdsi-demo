@@ -39,14 +39,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt onnxruntime t
 - **IDE hooks:** `integrations/claude_code/ai_edr_hook.py` works for Claude Code and Gemini CLI.
 - **Browser extension:** `integrations/browser_extension/` protects claude.ai and gemini.google.com (prompts and file uploads).
 
-**Endpoint fleet:** `agent/checkpointd` runs on each machine and checks what AI agents do: commands they run, files they read and connections they open. A Linux BPF LSM program in `agent/kernel/linux` adds in-kernel denial. The control plane (`src/control_plane`, `/v1/cp`) keeps the AI Risk DB in a database and ships it as gated, Ed25519-signed releases through CANARY → GA rings. The portal is at `/portal`. Run `./scripts/start_fleet_demo.sh`.
+**Endpoint fleet:** `agent/checkpointd` runs on each machine and checks what AI agents do: commands they run, files they read and connections they open. On Linux, a BPF LSM program in `agent/kernel/linux` adds in-kernel denial. On Windows, `agent/windows/install.ps1` runs the agent as a SYSTEM service, and `agent/kernel/windows` holds a minifilter driver. The control plane (`src/control_plane`, `/v1/cp`) keeps the AI Risk DB in a database and ships it as gated, Ed25519-signed releases through CANARY → GA rings. The portal is at `/portal`. Run `./scripts/start_fleet_demo.sh`.
 
 **Policy:** `config/ai_edr_policies.yaml` sets the mode per tenant: `BLOCK_AND_QUARANTINE`, `STRIP_AND_SANITIZE` or `AUDIT_ONLY`. It also holds DLP rules, thresholds and the FabriX/AI Pro field maps.
 
 ## Status and honest limits
 
 - Inspects inputs only; model output is not inspected yet.
-- The endpoint agent's user-space sensor kills malicious commands after they start; pre-exec denial needs the kernel checkpoint, whose Linux BPF code has not been compiled or run on a real kernel yet. See [docs/FLEET_PLATFORM.md](docs/FLEET_PLATFORM.md).
+- The endpoint agent's user-space sensor kills malicious commands after they start; pre-exec denial needs a kernel checkpoint. The Linux BPF LSM program is verified on Fedora 44, and it needs `bpf` in the kernel's active LSM list, which Ubuntu does not enable by default. The Windows minifilter is built in CI but not yet loaded, because that needs driver signing. On Windows, the agent itself is tested in CI as a SYSTEM service. See [docs/FLEET_PLATFORM.md](docs/FLEET_PLATFORM.md).
 - Redis and Qdrant are represented by in-process stand-ins with the same interfaces; see `requirements-ml.txt`.
 - The DeBERTa model is English-only. Korean text is covered by Korean signatures, IOAs and the local classifier.
 - Known false positive: "Please ignore the previous email…"; see `docs/BENCHMARK.md`.
