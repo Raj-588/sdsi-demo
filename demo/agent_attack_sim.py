@@ -47,14 +47,14 @@ def main() -> None:
     ws = Path(sys.argv[1] if len(sys.argv) > 1 else "agent_workspace").resolve()
     ws.mkdir(parents=True, exist_ok=True)
     (ws / "candidate_resume.pdf").write_bytes(make_resume_pdf(True))
-    (ws / "README.md").write_text(MALICIOUS_README)
-    (ws / "notes.md").write_text("# Sprint notes\n\n- Ship the payments retry fix\n- Review the on-call rota\n")
-    print(f"[sim] dropped 3 files into {ws}")
+    (ws / "README.md").write_text(MALICIOUS_README, encoding="utf-8")
+    (ws / "notes.md").write_text("# Sprint notes\n\n- Ship the payments retry fix\n- Review the on-call rota\n", encoding="utf-8")
+    print(f"[sim] dropped 3 files into {ws}", flush=True)
     time.sleep(3)                                   # let the file sensor pre-scan them
     # The agent's own code lives outside the watched workspace (it contains the exfil command as data).
     with tempfile.TemporaryDirectory() as tmp:
         agent = Path(tmp) / "demo_ai_agent.py"
-        agent.write_text(AGENT_SRC)
+        agent.write_text(AGENT_SRC, encoding="utf-8")
         subprocess.run([sys.executable, str(agent)], cwd=ws)
 
 

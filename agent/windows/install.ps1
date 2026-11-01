@@ -61,7 +61,8 @@ if ($LASTEXITCODE -ne 0) { throw "$Python is missing dependencies: run  $Python 
 New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 icacls $StateDir /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null   # SYSTEM, Administrators
 
-$argv = @("-m", "agent.checkpointd", "--server", $Server, "--enroll-token", $EnrollToken, "--state-dir", $StateDir,
+# -X utf8: a service gets the ANSI code page (cp1252) by default, and the Risk DB and gate corpus are UTF-8
+$argv = @("-X", "utf8", "-m", "agent.checkpointd", "--server", $Server, "--enroll-token", $EnrollToken, "--state-dir", $StateDir,
           "--ring", $Ring, "--log-file", (Join-Path $StateDir "checkpointd.log"))
 foreach ($w in $Watch) { $argv += @("--watch", (Resolve-Path $w).Path) }
 foreach ($a in $AiProcess) { $argv += @("--ai-process", $a) }

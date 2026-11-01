@@ -69,7 +69,7 @@ def test_message_layouts_match_driver_header():
     assert wd.NotifyMessage.Notify.offset == 16                  # FILTER_MESSAGE_HEADER is 16 bytes on x64
     assert wd.REPLY_SIZE == 20                                   # FILTER_REPLY_HEADER + CP_REPLY, unpadded
     header = Path(__file__).resolve().parents[1] / "agent/kernel/windows/checkpoint_shared.h"
-    text = header.read_text()
+    text = header.read_text(encoding="utf-8")
     assert "#define CP_MAX_PATH         260" in text and "#define CP_MAX_CMDLINE      1024" in text
     assert 'CP_PORT_NAME        L"\\\\CheckPointZeroPort"' in text and wd.PORT_NAME == "\\CheckPointZeroPort"
 

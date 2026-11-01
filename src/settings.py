@@ -61,7 +61,7 @@ class PolicyStore:
     def reload(self) -> None:
         mtime = self.path.stat().st_mtime
         if mtime != self._mtime:
-            self._raw = yaml.safe_load(self.path.read_text()) or {}
+            self._raw = yaml.safe_load(self.path.read_text(encoding="utf-8")) or {}
             self._mtime = mtime
 
     @property
@@ -80,7 +80,7 @@ class PolicyStore:
 
 
 def load_signature_seed() -> dict[str, Any]:
-    return json.loads((CONFIG_DIR / "initial_risk_signatures.json").read_text())
+    return json.loads((CONFIG_DIR / "initial_risk_signatures.json").read_text(encoding="utf-8"))
 
 
 policy_store = PolicyStore()

@@ -138,17 +138,17 @@ def main() -> None:
     (OUT / "candidate_resume_poisoned.pdf").write_bytes(make_resume_pdf(True))
     (OUT / "candidate_resume_clean.pdf").write_bytes(make_resume_pdf(False))
     (OUT / "vendor_questionnaire_poisoned.docx").write_bytes(make_docx_poisoned())
-    (OUT / "release_notes_poisoned.html").write_text(WEB_PAGE)
-    (OUT / "fabrix_rag_chunk_smuggled.txt").write_text(RAG_CHUNK_SMUGGLED)
-    (OUT / "onboarding_faq_poisoned.html").write_text(ONBOARDING_FAQ)
+    (OUT / "release_notes_poisoned.html").write_text(WEB_PAGE, encoding="utf-8")
+    (OUT / "fabrix_rag_chunk_smuggled.txt").write_text(RAG_CHUNK_SMUGGLED, encoding="utf-8")
+    (OUT / "onboarding_faq_poisoned.html").write_text(ONBOARDING_FAQ, encoding="utf-8")
 
     # Workspace used for the live Claude Code / Gemini CLI demo
     (IDE / "candidate_resume.pdf").write_bytes(make_resume_pdf(True))
-    (IDE / "README.md").write_text(MALICIOUS_README)
-    (IDE / "candidate_notes.txt").write_text(CANDIDATE_NOTES)
+    (IDE / "README.md").write_text(MALICIOUS_README, encoding="utf-8")
+    (IDE / "candidate_notes.txt").write_text(CANDIDATE_NOTES, encoding="utf-8")
     (IDE / "job_description.md").write_text(
         "# Principal Architect\n\nRequirements: 10+ years experience, led multi-region distributed systems, "
-        "deep Kubernetes and cloud networking expertise, prior architect title.\n")
+        "deep Kubernetes and cloud networking expertise, prior architect title.\n", encoding="utf-8")
     print(f"wrote demo files to {OUT} and {IDE}")
 
 

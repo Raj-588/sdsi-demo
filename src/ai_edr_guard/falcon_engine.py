@@ -37,7 +37,7 @@ class LocalInjectionClassifier:
 
     def __init__(self):
         self.embedder = HashingEmbedder()
-        data = json.loads((CONFIG_DIR / "classifier_training.json").read_text())
+        data = json.loads((CONFIG_DIR / "classifier_training.json").read_text(encoding="utf-8"))
         pos = data["injection"] + [a["text"] for a in load_signature_seed().get("attack_corpus", [])]
         neg = data["benign"]
         X = np.stack([self.embedder.embed(t) for t in pos + neg])
@@ -90,7 +90,7 @@ class OnnxPromptGuard:
         self.tok.enable_truncation(max_length=256)
         self.tok.enable_padding()
         self.inputs = {i.name for i in self.session.get_inputs()}
-        cfg = json.loads(open(os.path.join(path, "config.json")).read())
+        cfg = json.loads(open(os.path.join(path, "config.json"), encoding="utf-8").read())
         labels = {int(k): v.upper() for k, v in cfg.get("id2label", {}).items()}
         self.pos = next((i for i, v in labels.items() if "INJECT" in v or "JAILBREAK" in v), max(labels or {1: ""}))
         self.local = LocalInjectionClassifier()

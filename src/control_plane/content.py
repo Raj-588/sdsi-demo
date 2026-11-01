@@ -86,7 +86,7 @@ def build_bundle(release: dict, tenant_id: str, signer: ContentSigner) -> dict:
 # ---------------------------------------------------------------------------
 
 def gate_corpus() -> dict:
-    data = json.loads((CONFIG_DIR / "gate_corpus.json").read_text())
+    data = json.loads((CONFIG_DIR / "gate_corpus.json").read_text(encoding="utf-8"))
     attacks = [a["text"] for a in load_signature_seed().get("attack_corpus", [])] + data["attacks"]
     return {"attacks": attacks, "benign": data["benign"]}
 

@@ -22,7 +22,7 @@ class AgentState:
 
     # identity ---------------------------------------------------------------
     def identity(self) -> dict | None:
-        return json.loads(self.identity_path.read_text()) if self.identity_path.exists() else None
+        return json.loads(self.identity_path.read_text(encoding="utf-8")) if self.identity_path.exists() else None
 
     def save_identity(self, ident: dict) -> None:
         self._write(self.identity_path, json.dumps(ident, indent=2))
@@ -30,7 +30,7 @@ class AgentState:
     # content ----------------------------------------------------------------
     def bundle(self) -> dict | None:
         try:
-            return json.loads(self.bundle_path.read_text()) if self.bundle_path.exists() else None
+            return json.loads(self.bundle_path.read_text(encoding="utf-8")) if self.bundle_path.exists() else None
         except ValueError:
             return None
 
@@ -39,7 +39,7 @@ class AgentState:
 
     # crash counter (boot-loop guard) -----------------------------------------
     def bump_crash_count(self) -> int:
-        n = int(self.crash_path.read_text() or 0) + 1 if self.crash_path.exists() else 1
+        n = int(self.crash_path.read_text(encoding="utf-8") or 0) + 1 if self.crash_path.exists() else 1
         self._write(self.crash_path, str(n))
         return n
 
@@ -48,7 +48,7 @@ class AgentState:
 
     # outbox -------------------------------------------------------------------
     def queue_events(self, events: list[dict]) -> None:
-        with self._lock, open(self.outbox_path, "a") as fh:
+        with self._lock, open(self.outbox_path, "a", encoding="utf-8") as fh:
             for e in events:
                 fh.write(json.dumps(e) + "\n")
 
@@ -56,7 +56,7 @@ class AgentState:
         with self._lock:
             if not self.outbox_path.exists():
                 return []
-            lines = self.outbox_path.read_text().splitlines()
+            lines = self.outbox_path.read_text(encoding="utf-8").splitlines()
             batch, rest = lines[:limit], lines[limit:]
             self._write(self.outbox_path, "".join(line + "\n" for line in rest))
         return [json.loads(line) for line in batch if line.strip()]
@@ -64,10 +64,10 @@ class AgentState:
     def outbox_size(self) -> int:
         if not self.outbox_path.exists():
             return 0
-        return sum(1 for _ in open(self.outbox_path))
+        return sum(1 for _ in open(self.outbox_path, encoding="utf-8"))
 
     def _write(self, path: Path, text: str) -> None:
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(text)
+        tmp.write_text(text, encoding="utf-8")
         os.chmod(tmp, 0o600)
         tmp.replace(path)                          # atomic: a crash never leaves a half-written file

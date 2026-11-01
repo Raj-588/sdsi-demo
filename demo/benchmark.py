@@ -177,7 +177,7 @@ def run() -> dict:
     code_fp = 0
     code_lat = []
     for f in files:
-        t = open(f, errors="ignore").read()[:20000]
+        t = open(f, encoding="utf-8", errors="ignore").read()[:20000]
         v = verdict(doc=t, kind=SegmentKind.TOOL_RESULT)
         code_lat.append(v.latency_ms["total_ms"])
         if v.verdict != VerdictType.ALLOWED:
@@ -199,7 +199,7 @@ def run() -> dict:
 if __name__ == "__main__":
     r = run()
     (ROOT / "data").mkdir(exist_ok=True)
-    (ROOT / "data" / "benchmark.json").write_text(json.dumps(r, indent=2, ensure_ascii=False))
+    (ROOT / "data" / "benchmark.json").write_text(json.dumps(r, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Dev set   direct / indirect detection : {r['direct_detection']:.0%} / {r['indirect_detection']:.0%}"
           f"  ({r['counts']['direct']}+{r['counts']['indirect']}, used for IOA tuning)")
     print(f"Fresh set direct / indirect detection : {r['fresh_direct_detection']:.0%} / {r['fresh_indirect_detection']:.0%}"

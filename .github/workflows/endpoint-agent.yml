@@ -43,10 +43,10 @@ jobs:
           New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
           Set-Content "$env:USERPROFILE\.ssh\id_rsa" "-----BEGIN OPENSSH PRIVATE KEY----- (CI dummy key)"
           .\agent\windows\install.ps1 -Watch C:\cpz\ws -AiProcess demo_ai_agent -Ring CANARY -Python (Get-Command python).Source
-          $agents = @()
+          $agents = $null        # Invoke-RestMethod emits a JSON array as one object: @() would count an empty list as 1
           for ($i = 0; $i -lt 120 -and $agents.Count -lt 1; $i++) {
             Start-Sleep 1
-            $agents = @(Invoke-RestMethod http://127.0.0.1:8080/v1/cp/agents)
+            $agents = Invoke-RestMethod http://127.0.0.1:8080/v1/cp/agents
           }
           $agents | Format-Table agent_id, hostname, os, ring, mode, content_version
           if ($agents.Count -lt 1) { throw "agent never enrolled" }
@@ -116,7 +116,12 @@ jobs:
           foreach ($fn in "FltRegisterFilter", "FltCreateCommunicationPort", "FltSendMessage", "PsSetCreateProcessNotifyRoutineEx") {
             if (-not ($imports -match $fn)) { throw "missing import $fn" }
           }
-          if (-not ($headers -match "Force Integrity")) { throw "/INTEGRITYCHECK not set (PsSetCreateProcessNotifyRoutineEx would fail)" }
+          $headers | Select-String -Context 0,8 "DLL characteristics"
+          # IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY (0x80), read from the PE optional header (e_lfanew + 4 + 20 + 70)
+          $b = [IO.File]::ReadAllBytes($sys.FullName)
+          $flags = [BitConverter]::ToUInt16($b, [BitConverter]::ToInt32($b, 0x3C) + 94)
+          "DllCharacteristics = 0x{0:X4}" -f $flags
+          if (-not ($flags -band 0x80)) { throw "/INTEGRITYCHECK not set (PsSetCreateProcessNotifyRoutineEx would fail)" }
           "imports and integrity flag OK"
       - uses: actions/upload-artifact@v4
         with:

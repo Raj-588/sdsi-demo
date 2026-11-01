@@ -77,7 +77,7 @@ class QuarantineVault:
             "platform": rec.source_platform, "severity": rec.severity, "risk": rec.risk_score,
             "categories": sorted({f.category for f in verdict.findings}), "ts": rec.created_at.isoformat(),
         }
-        with open(self.siem_path, "a") as fh:
+        with open(self.siem_path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(alert) + "\n")
         bus.publish("siem_alert", alert)
 
