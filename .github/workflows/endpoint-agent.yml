@@ -27,7 +27,9 @@ jobs:
       - name: Agent and control-plane tests
         run: python -m pytest -q tests/test_agent.py tests/test_agent_windows.py tests/test_control_plane.py
 
-      - name: Gateway + portal
+      # One step: Windows runners end a step's background processes when the step finishes, so the gateway
+      # must live in the step that uses it. checkpointd runs from Task Scheduler and is not affected.
+      - name: Gateway, checkpointd as a SYSTEM task, live attack
         shell: pwsh
         run: |
           Start-Process python -ArgumentList "-m","uvicorn","src.main:app","--port","8080" `
@@ -35,30 +37,23 @@ jobs:
           for ($i = 0; $i -lt 60; $i++) {
             try { Invoke-RestMethod http://127.0.0.1:8080/healthz | Out-Null; break } catch { Start-Sleep 1 }
           }
-          Invoke-RestMethod http://127.0.0.1:8080/healthz
+          Invoke-RestMethod http://127.0.0.1:8080/healthz | Out-Null
 
-      - name: Install checkpointd as a SYSTEM task
-        shell: pwsh
-        run: |
           New-Item -ItemType Directory -Force C:\cpz\ws | Out-Null
           New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
           Set-Content "$env:USERPROFILE\.ssh\id_rsa" "-----BEGIN OPENSSH PRIVATE KEY----- (CI dummy key)"
           .\agent\windows\install.ps1 -Watch C:\cpz\ws -AiProcess demo_ai_agent -Ring CANARY -Python (Get-Command python).Source
-          for ($i = 0; $i -lt 60; $i++) {
-            $agents = Invoke-RestMethod http://127.0.0.1:8080/v1/cp/agents
-            if ($agents.Count -ge 1) { break }
+          $agents = @()
+          for ($i = 0; $i -lt 120 -and $agents.Count -lt 1; $i++) {
             Start-Sleep 1
+            $agents = @(Invoke-RestMethod http://127.0.0.1:8080/v1/cp/agents)
           }
           $agents | Format-Table agent_id, hostname, os, ring, mode, content_version
-          if ($agents.Count -lt 1) { Get-Content C:\ProgramData\checkpointd\checkpointd.log; throw "agent never enrolled" }
+          if ($agents.Count -lt 1) { throw "agent never enrolled" }
           Start-Sleep 5          # let the file sensor index the workspace and the process sensor settle
 
-      - name: Live attack (hijacked AI agent + poisoned documents)
-        shell: pwsh
-        run: |
           python demo/agent_attack_sim.py C:\cpz\ws
           Start-Sleep 6
-          Get-Content C:\ProgramData\checkpointd\checkpointd.log
           python -c "
           import json, sys, urllib.request
           events = json.load(urllib.request.urlopen('http://127.0.0.1:8080/v1/cp/events?limit=100'))
@@ -76,6 +71,16 @@ jobs:
           if (Test-Path C:\cpz\ws\README.md) { throw "poisoned README was not quarantined" }
           if (-not (Test-Path C:\cpz\ws\notes.md)) { throw "clean file was touched" }
 
+      - name: Agent task, processes and log
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ScheduledTask -TaskName CheckPointZero-checkpointd -ErrorAction SilentlyContinue |
+            Get-ScheduledTaskInfo | Format-List LastRunTime, LastTaskResult, NumberOfMissedRuns
+          Get-CimInstance Win32_Process -Filter "Name like 'python%'" | Format-Table ProcessId, CommandLine -Wrap
+          $log = "C:\ProgramData\checkpointd\checkpointd.log"
+          if (Test-Path $log) { Get-Content $log } else { "no agent log at $log" }
+
       - name: Uninstall
         if: always()
         shell: pwsh
@@ -83,12 +88,10 @@ jobs:
           .\agent\windows\install.ps1 -Uninstall
           if (Get-ScheduledTask -TaskName CheckPointZero-checkpointd -ErrorAction SilentlyContinue) { throw "task still registered" }
 
-      - name: Logs
+      - name: Gateway log
         if: failure()
         shell: pwsh
-        run: |
-          Get-Content server.err -ErrorAction SilentlyContinue | Select-Object -Last 60
-          Get-Content C:\ProgramData\checkpointd\checkpointd.log -ErrorAction SilentlyContinue
+        run: Get-Content server.err -ErrorAction SilentlyContinue | Select-Object -Last 60
 
   windows-driver:
     name: Windows minifilter (WDK build)
@@ -97,6 +100,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64         # WDK 26100 ships InfVerif.dll for x64 hosts only
       - name: Build checkpoint.sys
         run: msbuild agent\kernel\windows\checkpoint.vcxproj /p:Configuration=Release /p:Platform=x64 /v:minimal
       - name: Check the driver binary

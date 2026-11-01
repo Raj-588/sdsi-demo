@@ -44,6 +44,7 @@
   </ItemGroup>
   <ItemGroup>
     <Inf Include="checkpoint.inf" />
+    <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

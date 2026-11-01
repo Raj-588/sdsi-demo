@@ -15,7 +15,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))                    # the agent ships with the shared detection engine in src/
 
 from agent.checkpointd.config import AgentConfig  # noqa: E402
-from agent.checkpointd.daemon import Checkpointd  # noqa: E402
 
 
 def main() -> None:
@@ -40,13 +39,22 @@ def main() -> None:
         cfg.watch_dirs = [p.expanduser().resolve() for p in a.watch]
     if a.ai_process:
         cfg.ai_processes = a.ai_process
+    if a.log_file:
+        a.log_file.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO, filename=a.log_file, encoding="utf-8",
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s", datefmt="%H:%M:%S")
     for noisy in ("httpx", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    agent = Checkpointd(cfg)
-    agent.start()
+    # A service has no console: logging is set up before the detection engine is imported, so a startup
+    # failure lands in the log file instead of a stderr nobody reads.
+    try:
+        from agent.checkpointd.daemon import Checkpointd
+        agent = Checkpointd(cfg)
+        agent.start()
+    except Exception:
+        logging.getLogger("checkpointd").exception("startup failed")
+        raise
     agent.run_forever()
 
 
