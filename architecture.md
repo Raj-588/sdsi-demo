@@ -791,3 +791,33 @@ The first implementation of §19. Details, results and limits: [docs/FLEET_PLATF
 | Learning loop | Gateway promotions → TENANT `LEARNED` entries → auto-release to CANARY | Gateway still learns instantly in-process; endpoints get it through the gate |
 | Portal | `/portal`: overview, detections with process lineage, endpoints (ring/mode control), Risk DB (OWASP/ATLAS, approve/disable/FP), releases (gate, promote, rollback), deploy, audit | No SSO/RBAC yet |
 
+### 20.1 Kernel checkpoints by OS (2 Nov 2026)
+
+How §19.6 maps to what exists. In every case the kernel only enforces tables that `checkpointd` fills; it never parses content.
+
+| | Linux | Windows | macOS |
+|---|---|---|---|
+| **Mechanism** | BPF LSM program + libbpf loader (`agent/kernel/linux`) | File-system minifilter + process-creation callback, `checkpoint.sys` (`agent/kernel/windows`) | None yet: user-space sensors only |
+| **AI lineage** | `tp_btf` fork/exit tracepoints; AI agents also matched by name at exec | Process-creation callback; AI agents matched by image name, interpreted agents registered by `checkpointd` | Process-table poll |
+| **Credential files** | `lsm/file_open` → `EPERM`, matched by device + inode | `IRP_MJ_CREATE` → `STATUS_ACCESS_DENIED`, matched by NT path prefix; works even when `checkpointd` is down | Seen only in command lines |
+| **Exec** | `lsm/bprm_check_security` reports; `checkpointd` judges and kills | Creation waits up to 250 ms for `checkpointd`'s verdict; a block fails the creation before the process runs; no answer → allowed | Poll + kill |
+| **Network** | `lsm/socket_connect` → `EPERM` outside the allow-list (IPv4) | User-space poll; the WFP callout is not built | User-space poll |
+| **Channel to `checkpointd`** | Maps pinned at `/sys/fs/bpf/checkpointd` + ring buffer | Filter communication port `\CheckPointZeroPort` (SYSTEM and Administrators only) | — |
+| **Status** | **Verified** on Fedora 44 (kernel 6.19, arm64): 8/8 live kernel tests. Built in CI on Ubuntu 24.04 | **Built in CI** (`/W4 /WX`, InfVerif, Inf2Cat, `/INTEGRITYCHECK`); **never loaded**. Needs test signing or attestation signing and a Microsoft altitude. x64 only: a Windows VM on Apple Silicon needs an ARM64 build | Needs the Endpoint Security entitlement |
+
+**Selection and fallback.** At startup `checkpointd` picks a kernel sensor:
+1. **Linux program,** when the agent runs as root, the loader is built, `bpftool` is installed and `bpf` is in the active LSM list.
+2. **Otherwise, the Windows driver,** if it is loaded and accepts the connection on its port.
+3. **Otherwise, no kernel sensor.**
+
+The user-space sensors run in every case, so a missing kernel component lowers protection but never stops the agent.
+
+### 20.2 CI
+
+`.github/workflows/endpoint-agent.yml` runs on every push to the `Round_3_CheckPoint_Zero_AI_EDR` branch that changes the agent, engine, tests, demo or config:
+
+| Job | Runner | Checks |
+|---|---|---|
+| `windows-agent` | `windows-latest` | Unit tests, then a full install as a SYSTEM task. The job runs the attack simulation and asserts that the exfiltration was killed, that 2 files were sanitized and that the events reached the control plane. Then it uninstalls |
+| `windows-driver` | `windows-2022` + WDK 10.0.26100 | Builds `checkpoint.sys` and its catalog, and checks the kernel imports and the integrity flag. The unsigned package is uploaded as an artifact |
+| `linux-bpf` | `ubuntu-24.04` | Builds the BPF program and loader and runs the tests. The kernel tests skip there, because GitHub's Ubuntu kernel does not enable the BPF LSM |

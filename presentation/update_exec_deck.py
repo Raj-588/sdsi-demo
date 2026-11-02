@@ -2,8 +2,11 @@
 
     python presentation/update_exec_deck.py
 
-Idempotent: always rebuilds from presentation/backup/<original>.pptx, so re-running is safe.
+Idempotent: always rebuilds from presentation/backup/<original>.pptx.
 Edit the original in backup/ if the base deck itself changes.
+
+Do not re-run on the current deck: since 2 Nov 2026 it also has the endpoint-agent slides (19-22) and
+text updates made directly in the .pptx, and a rebuild from the 28 Oct original would drop them.
 """
 from __future__ import annotations
 

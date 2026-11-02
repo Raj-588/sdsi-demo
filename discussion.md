@@ -293,3 +293,29 @@ Vendor efficacy figures and third-party price figures are unverified. Confirm th
 - Kernel egress: a WFP callout on Windows; IPv6 in the Linux `connect()` hook.
 - Tamper protection for the Windows agent (protected service).
 - Linux fleets on Ubuntu need `lsm=…,bpf` on the kernel command line, or they run on the user-space sensors only.
+
+---
+
+## 2026-11-02: Where eBPF and the Windows driver stand; push target; docs, deck and spec brought up to date
+
+**Discussion:** "Is eBPF used in the code?" · "Does the Windows agent read at the OS kernel level?" · "But the code is there, right?" · "Push the code to ai-edr-guardrail, always." · "Update architecture.md, the ppt and the enterprise AI security guardrail spec with the latest details."
+
+**Key points**
+- **eBPF is used on Linux only.** The agent attaches it automatically when four things hold: it runs as root, the loader is built, `bpftool` is installed, and `bpf` is in the active LSM list. Otherwise it falls back to user-space polling. The program has 6 kernel hooks (3 LSM hooks, 3 tracepoints) and 6 maps. The kernel enforces; user space detects.
+- **The Windows agent tested in CI runs in user space today.** The kernel driver code is complete, in both repos, and builds clean in CI, but it has never been loaded.
+  - Windows only loads signed drivers. Testing needs test signing and a reboot; production needs attestation signing and an altitude assigned by Microsoft.
+  - Once the driver is loaded, the agent connects to it automatically.
+  - A Windows VM on an Apple Silicon Mac is ARM64, and the driver is built for x64 only, so testing there needs an ARM64 build.
+
+**Decisions**
+- **Push target:** from now on every push goes to both Raj-588/ai-edr-guardrail `main` and Raj-588/sdsi-demo `Round_3_CheckPoint_Zero_AI_EDR`, fast-forward only. Commits that touch `.github/workflows/` go over SSH, because the gh CLI token lacks the `workflow` scope.
+- **Executive deck** (`presentation/AI-EDR_Guardrail_Executive_28Oct.pptx`) is now 26 slides.
+  - New slides 19–22: the endpoint agent; the kernel checkpoint by OS, with honest status; real output from the Windows CI run and the Linux kernel; the fleet control plane.
+  - Updated: slide 2 mentions the endpoint agent, slide 17 shows 120 tests, and slides 23–25 no longer call the endpoint agent future work.
+  - `update_exec_deck.py` must not be re-run: it rebuilds from the 28 Oct original and would drop the new slides.
+- **`enterprise_ai_security_guardrail_specification.md`** now records what was built: models, thresholds, the 5 integration modes, the schema, the repo layout, the endpoint agent, the control plane, results and limits. The original Gemini build prompts are kept as history.
+- **`architecture.md`:** §19 is marked as the design. §20.1 (kernel checkpoints by OS) and §20.2 (CI) were added. The README limits line no longer says the BPF code is untested.
+
+**Open questions / next steps**
+- An ARM64 build of the Windows driver and a test-signing script, to load it in a Windows VM on the Mac.
+- The older generated deck (`presentation/AI-EDR_Guardrail.pptx`) still shows the 28 Oct content.
