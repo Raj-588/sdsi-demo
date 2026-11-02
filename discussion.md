@@ -319,3 +319,28 @@ Vendor efficacy figures and third-party price figures are unverified. Confirm th
 **Open questions / next steps**
 - An ARM64 build of the Windows driver and a test-signing script, to load it in a Windows VM on the Mac.
 - The older generated deck (`presentation/AI-EDR_Guardrail.pptx`) still shows the 28 Oct content.
+
+---
+
+## 2026-11-02: Agent-first, not agent-only: what the enterprise product is
+
+**Discussion:** "We will be making agents only, right, for the enterprise solution?"
+
+**Key points**
+- **The endpoint agent (CheckPoint Zero) is the core and the differentiator.** AI agents act: they run commands and read keys. Only something on the machine can stop that, and it can't be bypassed by unsetting a variable or switching tools. It also finds shadow AI and local models.
+- **The agent sees actions, not the conversation.** Prompt injection lives in the text sent to the model, which travels inside TLS. Only the gateway, IDE hooks and browser extension see that text. The agent catches the consequence (the exfiltration command) and poisoned files on disk.
+- **Some AI has no endpoint at all.** Server and cloud AI (FabriX workflows, AI Pro backends, RAG pipelines, MCP servers) is protected through the gateway and hook API.
+- **Some devices can't take a kernel agent:** phones, BYOD and contractor machines. Driver signing and Apple's entitlement also take months, while a gateway deploys in days.
+- **The current pilot ask runs on the gateway and hook API,** not the agent: one FabriX workflow and one AI Pro team, audit-only.
+
+**Decision (recommended)**
+- **One platform:** one engine, Risk DB and console behind every sensor.
+- **Two products:**
+  - **CheckPoint Zero Endpoint,** priced per device. Lands in R&D, where coding agents run.
+  - **AI-EDR Gateway,** priced per gateway or server. Protects FabriX, AI Pro and RAG.
+- **Included with both:** the browser extension, the IDE hooks and the control plane.
+- This matches the go-to-market draft above: a per-endpoint add-on plus a gateway tier.
+
+**Open questions**
+- Product names (the "Falcon" trademark issue is still open).
+- Whether the pilot adds a small endpoint cohort (R&D laptops with coding agents) next to the FabriX and AI Pro gateway pilot.
