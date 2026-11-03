@@ -6,8 +6,8 @@ Only reads AI-EDR_Guardrail_Executive_28Oct.pptx, for the cover with the team bl
 and the speaker-notes frame. Writes AI-EDR_Guardrail_MD_Brief_03Nov.pptx here and in the repo root, next to
 the .md files. Safe to re-run.
 
-The endpoint agent leads, and the ask is 60 days and one security team member. No latency figure appears
-on purpose: speed is measured in the pilot and reported on day 60.
+The endpoint agent leads. The ask is 60 days, one security team member and an LLM subscription for the
+team. No latency figure appears on purpose: speed is measured in the pilot and reported on day 60.
 """
 from __future__ import annotations
 
@@ -174,8 +174,8 @@ def cover(slide) -> None:
             runs[0].text = "Protects AI agents and platforms"
     chips(slide, ["Claude Code", "Gemini CLI", "Cursor", "Copilot", "FabriX", "AI Pro"])
     set_notes(slide, "Good morning. We are team CheckPoint Zero. In eight slides: the problem we solve, our agent, "
-                     "what already works, what is in and out of scope, and a small ask: 60 days and one security "
-                     "team member.")
+                     "what already works, what is in and out of scope, and a small ask: 60 days, one security team "
+                     "member and an LLM subscription.")
 
 
 def chips(slide, names) -> None:
@@ -396,21 +396,23 @@ def pilot(prs) -> None:
 
 
 def ask(prs) -> None:
-    s = new_slide(prs, "OUR ASK", "Our ask: 60 days and one security team member",
-                  "Our ask is small: 60 days, and one member of the security team to set policy, review alerts and "
-                  "sign off the results. By day 60 you get measured results on Samsung devices, policies tuned with "
-                  "the security team, and a clear go/no-go for wider rollout. We ask you to approve the 60-day pilot "
-                  "today.")
+    s = new_slide(prs, "OUR ASK", "Our ask: 60 days, a security member and an LLM subscription",
+                  "Our ask is small. 60 days. One member of the security team, to set policy, review alerts and sign "
+                  "off the results. And an LLM subscription for the team, so we build, test and deliver faster. By day "
+                  "60 you get measured results on Samsung devices, policies tuned with the security team, and a clear "
+                  "go/no-go for wider rollout. We ask you to approve these today.")
     w = (W - 0.5) / 3
-    for i, (number, label, body) in enumerate([
+    rw, rh = W - w - 0.25, (3.95 - 2 * 0.15) / 3     # three ask rows beside the "you get" card
+    for i, (big, label, body) in enumerate([
             ("60", "days", "To run the pilot on real devices and AI platforms."),
-            ("1", "security team member", "To set policy, review alerts and sign off the results.")]):
-        x = L + i * (w + 0.25)
-        box(s, "Card", x, 1.85, w, 3.95)
-        text(s, "Number", x + 0.35, 2.4, w - 0.7, 1.35, number, size=80, bold=True, color=ACCENT)
-        text(s, "Number label", x + 0.35, 3.85, w - 0.7, 0.45, label, size=24, bold=True, color=NAVY)
-        text(s, "Card text", x + 0.35, 4.45, w - 0.7, 0.9, body, size=17)
-    x = L + 2 * (w + 0.25)
+            ("1", "security team member", "To set policy, review alerts and sign off the results."),
+            ("LLM", "subscription", "For the team, so we build, test and deliver faster.")]):
+        y = 1.85 + i * (rh + 0.15)
+        box(s, "Card", L, y, rw, rh)
+        text(s, "Number", L + 0.35, y, 1.8, rh, big, size=54, bold=True, color=ACCENT, anchor=MSO_ANCHOR.MIDDLE)
+        text(s, "Number label", L + 2.3, y + 0.22, rw - 2.6, 0.4, label, size=22, bold=True, color=NAVY)
+        text(s, "Card text", L + 2.3, y + 0.66, rw - 2.6, 0.4, body)
+    x = L + rw + 0.25
     box(s, "Ask card", x, 1.85, w, 3.95, fill=ACCENT, line=None)
     icon(s, "handshake", x + 0.35, 2.15, 0.7, circle=NAVY)
     text(s, "Ask label", x + 0.35, 3.1, w - 0.7, 0.3, "BY DAY 60, YOU GET", size=11, bold=True, color=ON_BLUE, spc=200)
@@ -419,7 +421,8 @@ def ask(prs) -> None:
         y = 3.55 + j * 0.68
         icon(s, "ok_white", x + 0.35, y + 0.03, 0.3, circle=None)
         text(s, "Ask item", x + 0.8, y, w - 1.1, 0.62, line, bold=True, color=WHITE)
-    takeaway(s, 6.05, "Decision requested: ", "approve the 60-day pilot and name one security team member.", "flag")
+    takeaway(s, 6.05, "Decision requested: ", "approve the 60-day pilot, one security team member and an LLM "
+                                              "subscription.", "flag")
 
 
 def keep_cover_only(prs) -> None:
