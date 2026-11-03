@@ -344,3 +344,31 @@ Vendor efficacy figures and third-party price figures are unverified. Confirm th
 **Open questions**
 - Product names (the "Falcon" trademark issue is still open).
 - Whether the pilot adds a small endpoint cohort (R&D laptops with coding agents) next to the FabriX and AI Pro gateway pilot.
+
+## 2026-11-03: MD brief: 8 slides, agent-led, a 60-day ask
+
+**Discussion:** "Make a ppt of 8 pages apart from the first page, and include: 1. the major solution is the agent, right? What we are solving. 2. Do not commit latency for now; ask for 60 days and one security member. 3. What is in scope and out of scope, e.g. will it cover image and voice injection? Keep it very concise, as it will be shown to the MD."
+
+**Key points**
+- **New deck:** `AI-EDR_Guardrail_MD_Brief_03Nov.pptx` (in `presentation/` and the repo root), built by `presentation/build_md_deck.py`. It reuses the executive deck's cover (with the team block), theme and icons, followed by 8 slides: problem, gap, the agent, how it works, proof, scope, 60-day pilot, ask.
+- **The agent leads.** The CheckPoint Zero agent is shown as the major solution. The gateway appears as cover for AI with no device to install on: FabriX, AI Pro and RAG.
+- **No latency figure** appears on any slide or in the notes. The pilot measures detection, false alarms and speed on real use, and reports them on day 60.
+- **Scope:**
+  - In: text-based injection (prompts, PDF/Word, code, web pages, RAG) and agent actions (commands, file access, network).
+  - Out of this pilot: image-based injection (next phase, with OCR), voice and audio (later), checking the AI's answers (next phase), mobile phones (later).
+  - The code has no OCR or audio path today.
+- **Proof without rates:** the deck shows verified results per OS and the test count. The 70%/33% held-out detection rates are left for the pilot to measure on Samsung data.
+- **Executive deck fix:** 5 slides (the demo video and the 4 endpoint-agent slides) were outside any PowerPoint section. They are now in sections.
+
+**Decisions**
+- **The pilot ask changes** from 30 days, gateway only (executive deck), to **60 days and one security team member**.
+- **Pilot scope in the deck:**
+  - Agent on one R&D team's laptops, plus the gateway on one FabriX workflow and one AI Pro team.
+  - Days 1–15 monitor only; days 16–45 tune and test with the security member; days 46–60 blocking for a small group, then report.
+  - This answers the 2 Nov open question: the pilot adds an endpoint cohort.
+
+**Open questions**
+- Is the security team member full-time or part-time?
+- How many laptops are in the R&D cohort?
+- Voice and audio injection has no roadmap item yet; the slide says "later".
+- The executive deck still says "30-day pilot" and shows latency figures (30 days: slides 2 and 25; latency: slides 2, 7 and 17). Align it if both decks will be shown.
